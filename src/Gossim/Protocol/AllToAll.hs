@@ -5,6 +5,8 @@ module Gossim.Protocol.AllToAll (
   agent
   ) where
 
+import Control.Monad (forever)
+
 import Gossim (Gossim, Rumor,
                ReceiveHandler(Handler),
                receive, (!), getAgents, discovered)
@@ -16,8 +18,9 @@ data Message = RemoteRumor Rumor
 
 agent :: Gossim ()
 agent =
-  receive [Handler $ \(r :: Rumor) -> handleNewRumor r,
-           Handler $ \(m :: Message) -> handleMessage m]
+  forever $
+    receive [Handler $ \(r :: Rumor) -> handleNewRumor r,
+             Handler $ \(m :: Message) -> handleMessage m]
 
   where handleNewRumor :: Rumor -> Gossim ()
         handleNewRumor rumor = do
