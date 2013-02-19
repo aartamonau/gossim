@@ -1,9 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import Gossim.DSL
+module Gossim.Protocol.AllToAll (
+  agent
+  ) where
 
-import Control.Monad (forM_)
+import Gossim (Gossim, Rumor,
+               ReceiveHandler(Handler),
+               receive, (!), getAgents, discovered)
+
 import Data.Typeable (Typeable)
 
 data Message = RemoteRumor Rumor
@@ -17,7 +22,7 @@ agent =
   where handleNewRumor :: Rumor -> Gossim ()
         handleNewRumor rumor = do
           agents <- getAgents
-          forM_ agents $ \agent -> agent ! rumor
+          mapM_ (! rumor) agents
 
         handleMessage :: Message -> Gossim ()
         handleMessage (RemoteRumor rumor) = discovered rumor
