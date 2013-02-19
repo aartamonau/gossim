@@ -4,7 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Gossip.DSL where
+module Gossim.DSL where
 
 import Control.Applicative ((<$>))
 
@@ -45,41 +45,41 @@ instance Functor Action where
   fmap f (Discovered r s) = Discovered r (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
 
-data GossipEnv = GEnv { self   :: Agent
+data GossimEnv = GEnv { self   :: Agent
                       , agents :: [Agent]
                       , rumors :: IntMap Rumor
                       }
 
-newtype GossipM a = GossipM { unGossipM :: Coroutine Action (Reader GossipEnv) a }
+newtype Gossim a = Gossim { unGossim :: Coroutine Action (Reader GossimEnv) a }
                   deriving (Monad, Functor)
 
-instance MonadReader GossipEnv GossipM where
-  ask     = GossipM $ lift ask
-  reader  = GossipM . lift . reader
-  local f = GossipM . mapMonad (local f) . unGossipM
+instance MonadReader GossimEnv Gossim where
+  ask     = Gossim $ lift ask
+  reader  = Gossim . lift . reader
+  local f = Gossim . mapMonad (local f) . unGossim
 
-send :: Typeable msg => Agent -> msg -> GossipM ()
-send dst msg = GossipM $ suspend (Send dst msg (return ()))
+send :: Typeable msg => Agent -> msg -> Gossim ()
+send dst msg = Gossim $ suspend (Send dst msg (return ()))
 
-(!) :: Typeable msg => Agent -> msg -> GossipM ()
+(!) :: Typeable msg => Agent -> msg -> Gossim ()
 (!) = send
 
-receive :: [ReceiveHandler (GossipM a)] -> GossipM a
-receive handlers = join $ GossipM $ suspend (Receive handlers return)
+receive :: [ReceiveHandler (Gossim a)] -> Gossim a
+receive handlers = join $ Gossim $ suspend (Receive handlers return)
 
-discovered :: Rumor -> GossipM ()
-discovered rumor = GossipM $ suspend (Discovered rumor (return ()))
+discovered :: Rumor -> Gossim ()
+discovered rumor = Gossim $ suspend (Discovered rumor (return ()))
 
-getAgents :: GossipM [Agent]
+getAgents :: Gossim [Agent]
 getAgents = asks agents
 
-getSelf :: GossipM Agent
+getSelf :: Gossim Agent
 getSelf = asks self
 
 rumorId :: Rumor -> RumorId
 rumorId (Rumor rid) = rid
 
-getRumor :: RumorId -> GossipM Rumor
+getRumor :: RumorId -> Gossim Rumor
 getRumor (RumorId rid) =
   fromMaybe reportError . IntMap.lookup rid <$> asks rumors
   where reportError = error $ "Impossible: no rumor with id " ++ show rid
