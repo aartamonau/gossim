@@ -16,8 +16,8 @@ agent =
 
   where handleNewRumor :: Rumor -> GossipM ()
         handleNewRumor rumor = do
-          nodes <- getNodes
-          forM_ nodes $ \node -> node ! rumor
+          agents <- getAgents
+          forM_ agents $ \agent -> agent ! rumor
 
         handleMessage :: Message -> GossipM ()
         handleMessage (RemoteRumor rumor) = discovered rumor
