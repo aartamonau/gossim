@@ -2,9 +2,9 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Gossim.Internal.Types
-       ( AgentId (AgentId)
-       , RumorId (RumorId)
-       , Rumor (Rumor)
+       ( AgentId(AgentId)
+       , RumorId(RumorId)
+       , Rumor(Rumor, rumorId, rumorSize)
        ) where
 
 import Data.Typeable (Typeable)
@@ -15,5 +15,7 @@ newtype AgentId = AgentId Int
 newtype RumorId = RumorId Int
                 deriving Show
 
-data Rumor = Rumor RumorId
+data Rumor = Rumor { rumorId   :: RumorId
+                   , rumorSize :: Int
+                   }
            deriving Typeable

@@ -5,7 +5,6 @@ module Gossim.Internal.Combinators
        , discovered
        , getAgents
        , getSelf
-       , rumorId
        , getRumor
        , randomInt
        , randomIntR
@@ -27,7 +26,7 @@ import Gossim.Internal.Agent (Agent(Agent),
                               AgentEnv(agents, self, rumors),
                               Action(Send, Receive, Discovered),
                               ReceiveHandler)
-import Gossim.Internal.Types (AgentId, Rumor(Rumor), RumorId(RumorId))
+import Gossim.Internal.Types (AgentId, Rumor, RumorId(RumorId))
 
 send :: Typeable msg => AgentId -> msg -> Agent ()
 send dst msg = Agent $ suspend (Send dst msg (return ()))
@@ -46,9 +45,6 @@ getAgents = asks agents
 
 getSelf :: Agent AgentId
 getSelf = asks self
-
-rumorId :: Rumor -> RumorId
-rumorId (Rumor rid) = rid
 
 getRumor :: RumorId -> Agent Rumor
 getRumor (RumorId rid) =
