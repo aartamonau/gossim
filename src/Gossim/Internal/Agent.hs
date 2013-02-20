@@ -11,14 +11,12 @@ module Gossim.Internal.Agent
 
 import Control.Monad.Trans (MonadTrans(lift))
 import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader))
-import Control.Monad.State (State, MonadState(get, put, state))
 import Control.Monad.Coroutine (Coroutine, mapMonad)
 
 import Data.IntMap.Strict (IntMap)
 import Data.Typeable (Typeable)
 
-import System.Random.Mersenne.Pure64 (PureMT)
-
+import Gossim.Internal.Random (Random, MonadRandom(liftRandom))
 import Gossim.Internal.Types (AgentId, Rumor)
 
 data ReceiveHandler s where
@@ -43,7 +41,7 @@ data AgentEnv = AgentEnv { self   :: AgentId
                          }
 
 newtype Agent a =
-  Agent { unAgent :: Coroutine Action (ReaderT AgentEnv (State PureMT)) a }
+  Agent { unAgent :: Coroutine Action (ReaderT AgentEnv Random) a }
   deriving (Monad, Functor)
 
 instance MonadReader AgentEnv Agent where
@@ -51,7 +49,5 @@ instance MonadReader AgentEnv Agent where
   reader  = Agent . lift . reader
   local f = Agent . mapMonad (local f) . unAgent
 
-instance MonadState PureMT Agent where
-  get = Agent $ lift get
-  put = Agent . lift . put
-  state = Agent . lift . state
+instance MonadRandom Agent where
+  liftRandom = Agent . liftRandom
