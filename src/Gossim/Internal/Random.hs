@@ -26,6 +26,9 @@ class Monad m => MonadRandom m where
 instance MonadRandom Random where
   liftRandom = state
 
+instance MonadRandom IO where
+  liftRandom k = liftM (fst . k) Mersenne.newPureMT
+
 instance MonadRandom m => MonadRandom (ReaderT r m) where
   liftRandom = lift . liftRandom
 
