@@ -10,11 +10,14 @@ module Gossim.Internal.Monad
        ) where
 
 import Control.Monad.Trans (MonadTrans(lift))
-import Control.Monad.Reader (Reader, MonadReader(ask, local, reader))
+import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader))
+import Control.Monad.State (State, MonadState(get, put, state))
 import Control.Monad.Coroutine (Coroutine, mapMonad)
 
 import Data.IntMap.Strict (IntMap)
 import Data.Typeable (Typeable)
+
+import System.Random.Mersenne.Pure64 (PureMT)
 
 import Gossim.Internal.Types (Agent, Rumor)
 
@@ -39,10 +42,16 @@ data GossimEnv = GEnv { self   :: Agent
                       , rumors :: IntMap Rumor
                       }
 
-newtype Gossim a = Gossim { unGossim :: Coroutine Action (Reader GossimEnv) a }
-                  deriving (Monad, Functor)
+newtype Gossim a =
+  Gossim { unGossim :: Coroutine Action (ReaderT GossimEnv (State PureMT)) a }
+  deriving (Monad, Functor)
 
 instance MonadReader GossimEnv Gossim where
   ask     = Gossim $ lift ask
   reader  = Gossim . lift . reader
   local f = Gossim . mapMonad (local f) . unGossim
+
+instance MonadState PureMT Gossim where
+  get = Gossim $ lift get
+  put = Gossim . lift . put
+  state = Gossim . lift . state
