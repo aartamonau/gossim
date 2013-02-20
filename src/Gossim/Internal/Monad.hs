@@ -19,7 +19,7 @@ import Data.Typeable (Typeable)
 
 import System.Random.Mersenne.Pure64 (PureMT)
 
-import Gossim.Internal.Types (Agent, Rumor)
+import Gossim.Internal.Types (AgentId, Rumor)
 
 data ReceiveHandler s where
   Handler :: Typeable a => (a -> s) -> ReceiveHandler s
@@ -28,7 +28,7 @@ instance Functor ReceiveHandler where
   fmap f (Handler h) = Handler $ fmap f h
 
 data Action s where
-  Send :: Typeable msg => Agent -> msg -> s -> Action s
+  Send :: Typeable msg => AgentId -> msg -> s -> Action s
   Discovered :: Rumor -> s -> Action s
   Receive :: [ReceiveHandler a] -> (a -> s) -> Action s
 
@@ -37,8 +37,8 @@ instance Functor Action where
   fmap f (Discovered r s) = Discovered r (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
 
-data GossimEnv = GEnv { self   :: Agent
-                      , agents :: [Agent]
+data GossimEnv = GEnv { self   :: AgentId
+                      , agents :: [AgentId]
                       , rumors :: IntMap Rumor
                       }
 
