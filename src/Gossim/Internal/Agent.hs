@@ -2,11 +2,11 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Gossim.Internal.Monad
+module Gossim.Internal.Agent
        ( ReceiveHandler(Handler)
        , Action (Send, Receive, Discovered)
-       , GossimEnv (GEnv, self, agents, rumors)
-       , Gossim (Gossim, unGossim)
+       , AgentEnv (AgentEnv, self, agents, rumors)
+       , Agent (Agent, unAgent)
        ) where
 
 import Control.Monad.Trans (MonadTrans(lift))
@@ -37,21 +37,21 @@ instance Functor Action where
   fmap f (Discovered r s) = Discovered r (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
 
-data GossimEnv = GEnv { self   :: AgentId
-                      , agents :: [AgentId]
-                      , rumors :: IntMap Rumor
-                      }
+data AgentEnv = AgentEnv { self   :: AgentId
+                         , agents :: [AgentId]
+                         , rumors :: IntMap Rumor
+                         }
 
-newtype Gossim a =
-  Gossim { unGossim :: Coroutine Action (ReaderT GossimEnv (State PureMT)) a }
+newtype Agent a =
+  Agent { unAgent :: Coroutine Action (ReaderT AgentEnv (State PureMT)) a }
   deriving (Monad, Functor)
 
-instance MonadReader GossimEnv Gossim where
-  ask     = Gossim $ lift ask
-  reader  = Gossim . lift . reader
-  local f = Gossim . mapMonad (local f) . unGossim
+instance MonadReader AgentEnv Agent where
+  ask     = Agent $ lift ask
+  reader  = Agent . lift . reader
+  local f = Agent . mapMonad (local f) . unAgent
 
-instance MonadState PureMT Gossim where
-  get = Gossim $ lift get
-  put = Gossim . lift . put
-  state = Gossim . lift . state
+instance MonadState PureMT Agent where
+  get = Agent $ lift get
+  put = Agent . lift . put
+  state = Agent . lift . state

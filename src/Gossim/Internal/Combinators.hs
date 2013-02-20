@@ -23,42 +23,42 @@ import Data.Typeable (Typeable)
 
 import qualified System.Random.Mersenne.Pure64 as Mersenne
 
-import Gossim.Internal.Monad (Gossim(Gossim),
-                              GossimEnv(agents, self, rumors),
+import Gossim.Internal.Agent (Agent(Agent),
+                              AgentEnv(agents, self, rumors),
                               Action(Send, Receive, Discovered),
                               ReceiveHandler)
 import Gossim.Internal.Types (AgentId, Rumor(Rumor), RumorId(RumorId))
 
-send :: Typeable msg => AgentId -> msg -> Gossim ()
-send dst msg = Gossim $ suspend (Send dst msg (return ()))
+send :: Typeable msg => AgentId -> msg -> Agent ()
+send dst msg = Agent $ suspend (Send dst msg (return ()))
 
-(!) :: Typeable msg => AgentId -> msg -> Gossim ()
+(!) :: Typeable msg => AgentId -> msg -> Agent ()
 (!) = send
 
-receive :: [ReceiveHandler (Gossim a)] -> Gossim a
-receive handlers = join $ Gossim $ suspend (Receive handlers return)
+receive :: [ReceiveHandler (Agent a)] -> Agent a
+receive handlers = join $ Agent $ suspend (Receive handlers return)
 
-discovered :: Rumor -> Gossim ()
-discovered rumor = Gossim $ suspend (Discovered rumor (return ()))
+discovered :: Rumor -> Agent ()
+discovered rumor = Agent $ suspend (Discovered rumor (return ()))
 
-getAgents :: Gossim [AgentId]
+getAgents :: Agent [AgentId]
 getAgents = asks agents
 
-getSelf :: Gossim AgentId
+getSelf :: Agent AgentId
 getSelf = asks self
 
 rumorId :: Rumor -> RumorId
 rumorId (Rumor rid) = rid
 
-getRumor :: RumorId -> Gossim Rumor
+getRumor :: RumorId -> Agent Rumor
 getRumor (RumorId rid) =
   fromMaybe reportError . IntMap.lookup rid <$> asks rumors
   where reportError = error $ "Impossible: no rumor with id " ++ show rid
 
-randomInt :: Gossim Int
+randomInt :: Agent Int
 randomInt = state Mersenne.randomInt
 
-randomIntR :: (Int, Int) -> Gossim Int
+randomIntR :: (Int, Int) -> Agent Int
 randomIntR (l, u)
   | l > u     = randomIntR (u, l)
   | otherwise = bound <$> randomInt

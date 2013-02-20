@@ -7,7 +7,7 @@ module Gossim.Protocol.AllToAll (
 
 import Control.Monad (forever)
 
-import Gossim (Gossim, Rumor,
+import Gossim (Agent, Rumor,
                ReceiveHandler(Handler),
                receive, (!), getAgents, discovered)
 
@@ -16,16 +16,16 @@ import Data.Typeable (Typeable)
 data Message = RemoteRumor Rumor
              deriving Typeable
 
-agent :: Gossim ()
+agent :: Agent ()
 agent =
   forever $
     receive [Handler $ \(r :: Rumor) -> handleNewRumor r,
              Handler $ \(m :: Message) -> handleMessage m]
 
-  where handleNewRumor :: Rumor -> Gossim ()
+  where handleNewRumor :: Rumor -> Agent ()
         handleNewRumor rumor = do
           agents <- getAgents
           mapM_ (! rumor) agents
 
-        handleMessage :: Message -> Gossim ()
+        handleMessage :: Message -> Agent ()
         handleMessage (RemoteRumor rumor) = discovered rumor
