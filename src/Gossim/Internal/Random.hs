@@ -6,6 +6,8 @@ module Gossim.Internal.Random
        , randomInt
        , randomRInt
        , randomDouble
+       , pick
+       , pickUniformly
        ) where
 
 import Control.Monad (liftM)
@@ -16,6 +18,8 @@ import Control.Monad.Coroutine (Coroutine)
 
 import System.Random.Mersenne.Pure64 (PureMT)
 import qualified System.Random.Mersenne.Pure64 as Mersenne
+
+import Gossim.Internal.Types (Prob)
 
 newtype Random a = Random (State PureMT a)
                  deriving (Monad, MonadState PureMT, Functor)
@@ -49,3 +53,25 @@ randomRInt (l, u)
 
 randomDouble :: MonadRandom m => m Double
 randomDouble = liftRandom Mersenne.randomDouble
+
+pick :: MonadRandom m => [(a, Prob)] -> m a
+pick ps = do
+  r <- randomDouble
+  return $ go r ps
+
+  where go _ [] = error "Gossim.Internal.Random.pick: empty list"
+        go _ [(x, _)] = x
+        go r ((x, p) : rest)
+          | r <= p    = x
+          | otherwise = go (r - p) rest
+
+pickUniformly :: MonadRandom m => [a] -> m a
+pickUniformly []     = error "Gossim.Internal.Random.pickUniformly: empty list"
+pickUniformly (p:ps) = go 1 ps p
+  where go _ [] c         = return c
+        go count (x:xs) c = do
+          let count' = count + 1
+          r <- randomRInt (1, count')
+          if r == 1
+            then go count' xs x
+            else go count' xs c
