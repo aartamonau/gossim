@@ -7,6 +7,9 @@ module Gossim.Internal.Random
        , randomInt
        , randomRInt
        , randomDouble
+       , randomBool
+       , randomMaybe
+       , randomMaybeM
        , pick
        , pickUniformly
        ) where
@@ -59,6 +62,19 @@ randomRInt (l, u)
 
 randomDouble :: MonadRandom m => m Double
 randomDouble = liftRandom Mersenne.randomDouble
+
+randomBool :: MonadRandom m => Prob -> m Bool
+randomBool p = pick [(True, p), (False, 1 - p)]
+
+randomMaybe :: MonadRandom m => Prob -> a -> m (Maybe a)
+randomMaybe p = randomMaybeM p . return
+
+randomMaybeM :: MonadRandom m => Prob -> m a -> m (Maybe a)
+randomMaybeM p a = do
+  just <- randomBool p
+  if just
+    then liftM Just a
+    else return Nothing
 
 pick :: MonadRandom m => [(a, Prob)] -> m a
 pick ps = do
