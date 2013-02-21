@@ -1,7 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Gossim.Internal.Random
-       ( Random
+       ( RandomT
+       , Random
        , MonadRandom(liftRandom)
        , randomInt
        , randomRInt
@@ -10,10 +11,12 @@ module Gossim.Internal.Random
        , pickUniformly
        ) where
 
+import Control.Applicative (Applicative)
 import Control.Monad (liftM)
 import Control.Monad.Trans (lift)
+import Control.Monad.Identity (Identity)
 import Control.Monad.Reader (ReaderT)
-import Control.Monad.State.Strict (StateT, State, MonadState(state))
+import Control.Monad.State.Strict (StateT, MonadState(state))
 import Control.Monad.Coroutine (Coroutine)
 
 import System.Random.Mersenne.Pure64 (PureMT)
@@ -21,13 +24,16 @@ import qualified System.Random.Mersenne.Pure64 as Mersenne
 
 import Gossim.Internal.Types (Prob)
 
-newtype Random a = Random (State PureMT a)
-                 deriving (Monad, MonadState PureMT, Functor)
+newtype RandomT m a = RandomT (StateT PureMT m a)
+                    deriving (Monad, MonadState PureMT,
+                              Functor, Applicative)
+
+type Random = RandomT Identity
 
 class Monad m => MonadRandom m where
   liftRandom :: (PureMT -> (a, PureMT)) -> m a
 
-instance MonadRandom Random where
+instance Monad m => MonadRandom (RandomT m) where
   liftRandom = state
 
 instance MonadRandom IO where
