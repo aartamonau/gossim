@@ -1,9 +1,9 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Gossim.Protocol.AllToAll (
-  agent
-  ) where
+module Gossim.Protocol.AllToAll
+       ( agent
+       ) where
 
 import Control.Monad (forever)
 
