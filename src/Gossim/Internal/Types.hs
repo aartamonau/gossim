@@ -5,11 +5,14 @@ module Gossim.Internal.Types
        ( AgentId(AgentId)
        , RumorId(RumorId)
        , Rumor(Rumor, rumorId, rumorSize)
+       , Time
        , Prob
        ) where
 
+import Data.Word (Word64)
 import Data.Typeable (Typeable)
 
+type Time = Word64
 type Prob = Double
 
 newtype AgentId = AgentId Int
