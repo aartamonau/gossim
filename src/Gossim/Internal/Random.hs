@@ -17,6 +17,7 @@ module Gossim.Internal.Random
 import Control.Applicative (Applicative)
 import Control.Monad (liftM)
 import Control.Monad.Trans (lift, MonadIO)
+import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Identity (Identity)
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Strict (StateT, MonadState(state))
@@ -29,7 +30,8 @@ import Gossim.Internal.Types (Prob)
 
 newtype RandomT m a = RandomT (StateT PureMT m a)
                     deriving (Monad, MonadState PureMT,
-                              Functor, Applicative, MonadIO)
+                              Functor, Applicative,
+                              MonadIO, MonadCatchIO)
 
 type Random = RandomT Identity
 
