@@ -3,24 +3,32 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 import Prelude hiding (log)
 
 import Control.Lens (makeLenses, use, (+=))
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
-import Control.Monad.Reader (ReaderT, MonadReader)
-import Control.Monad.State.Strict (StateT, MonadState)
+import Control.Monad.Reader (ReaderT, MonadReader, runReaderT)
+import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
 import Data.IntMap.Strict (IntMap)
 
-import System.Log.Simple (MonadLog(askLog), Log)
+import System.Log.Simple (MonadLog(askLog), Log, Level(Trace, Debug, Fatal),
+                          Politics(Politics, politicsLow, politicsHigh),
+                          rule, root, newLog, constant,
+                          logger, text, console)
+import qualified System.Log.Simple as SimpleLog
 
 import Gossim.Internal.Agent (Agent)
 import Gossim.Internal.Types (Time,
                               AgentId,
                               Rumor(Rumor), RumorId(RumorId))
-import Gossim.Internal.Random (RandomT, MonadRandom, randomRInt, randomMaybeM)
+import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
+                               runRandomT, newSeed,
+                               randomRInt, randomMaybeM)
 
 
 ------------------------------------------------------------------------------
@@ -36,7 +44,9 @@ type GossimPure m = (Monad m, MonadRandom m,
 type RandomFunction a = GossimPure m => Time -> AgentId -> m a
 
 data GossimConfig =
-  GossimConfig { duration  :: Time
+  GossimConfig { logLevel :: Level
+
+               , duration  :: Time
                , numAgents :: Int
 
                , newRumorRF     :: RandomFunction (Maybe Rumor)
@@ -59,6 +69,13 @@ makeLenses ''GossimState
 instance MonadLog Gossim where
   askLog = use log
 
+
+------------------------------------------------------------------------------
+runGossim :: Gossim a -> GossimConfig -> GossimState -> Seed -> IO a
+runGossim (Gossim a) config state seed =
+  runRandomT (evalStateT (runReaderT a config) state) seed
+
+
 ------------------------------------------------------------------------------
 defaultNewRumorRF :: RandomFunction (Maybe Rumor)
 defaultNewRumorRF =
@@ -71,7 +88,9 @@ defaultAgentFailureRF = independent $ return False
 
 defaultConfig :: GossimConfig
 defaultConfig =
-  GossimConfig { duration  = 1000
+  GossimConfig { logLevel = Trace
+
+               , duration  = 1000
                , numAgents = 50
 
                , newRumorRF     = defaultNewRumorRF
@@ -104,4 +123,18 @@ createRumor size = do
 
 ------------------------------------------------------------------------------
 simulate :: Agent () -> GossimConfig -> IO ()
-simulate = undefined
+simulate agent config@(GossimConfig {logLevel}) = do
+  log  <- newLog (constant logRules) [logger text console]
+  seed <- newSeed
+  let initialState = GossimState { _log = log }
+
+  runGossim doSimulate config initialState seed
+
+  where logPolitics = Politics { politicsLow  = logLevel
+                               , politicsHigh = Fatal
+                               }
+        logRules    = [rule root $ SimpleLog.use logPolitics]
+
+
+doSimulate :: Gossim ()
+doSimulate = SimpleLog.log Debug "test\n"
