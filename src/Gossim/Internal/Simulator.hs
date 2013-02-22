@@ -7,6 +7,7 @@
 import Control.Lens (makeLenses, use, (+=))
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
+import Control.Monad.Reader (ReaderT, MonadReader)
 import Control.Monad.State.Strict (StateT, MonadState)
 
 import Data.IntMap.Strict (IntMap)
@@ -19,11 +20,14 @@ import Gossim.Internal.Random (RandomT, MonadRandom, randomRInt, randomMaybeM)
 
 
 ------------------------------------------------------------------------------
-newtype Gossim a = Gossim (StateT GossimState (RandomT IO) a)
-                 deriving (Monad, MonadRandom, MonadState GossimState,
-                           MonadIO, MonadCatchIO)
+newtype Gossim a =
+  Gossim (ReaderT GossimConfig (StateT GossimState (RandomT IO)) a)
+  deriving (Monad, MonadRandom,
+            MonadState GossimState, MonadReader GossimConfig,
+            MonadIO, MonadCatchIO)
 
-type GossimPure m = (Monad m, MonadRandom m, MonadState GossimState m)
+type GossimPure m = (Monad m, MonadRandom m,
+                     MonadState GossimState m, MonadReader GossimConfig m)
 
 type RandomFunction a = GossimPure m => Time -> AgentId -> m a
 
