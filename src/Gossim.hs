@@ -7,6 +7,9 @@ module Gossim
 
 import Gossim.Internal.Types (AgentId, RumorId, Rumor(rumorId))
 import Gossim.Internal.Agent (ReceiveHandler(Handler), Agent)
-import Gossim.Internal.Random (MonadRandom, randomInt, randomRInt, randomDouble)
+import Gossim.Internal.Random (MonadRandom,
+                               randomInt, randomRInt, randomDouble,
+                               randomBool, randomMaybe, randomMaybeM,
+                               pick, pickUniformly)
 import Gossim.Internal.Combinators (send, (!), receive, discovered,
                                     getAgents, getSelf, getRumor)
