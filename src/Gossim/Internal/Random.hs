@@ -3,7 +3,10 @@
 module Gossim.Internal.Random
        ( RandomT
        , Random
+       , Seed
        , MonadRandom(liftRandom)
+       , runRandomT
+       , newSeed
        , randomInt
        , randomRInt
        , randomDouble
@@ -20,7 +23,8 @@ import Control.Monad.Trans (lift, MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Identity (Identity)
 import Control.Monad.Reader (ReaderT)
-import Control.Monad.State.Strict (StateT, MonadState(state))
+import Control.Monad.State.Strict (StateT,
+                                   MonadState(state), evalStateT)
 import Control.Monad.Coroutine (Coroutine)
 
 import System.Random.Mersenne.Pure64 (PureMT)
@@ -28,21 +32,23 @@ import qualified System.Random.Mersenne.Pure64 as Mersenne
 
 import Gossim.Internal.Types (Prob)
 
-newtype RandomT m a = RandomT (StateT PureMT m a)
-                    deriving (Monad, MonadState PureMT,
+newtype Seed = Seed PureMT
+
+newtype RandomT m a = RandomT (StateT Seed m a)
+                    deriving (Monad, MonadState Seed,
                               Functor, Applicative,
                               MonadIO, MonadCatchIO)
 
 type Random = RandomT Identity
 
 class Monad m => MonadRandom m where
-  liftRandom :: (PureMT -> (a, PureMT)) -> m a
+  liftRandom :: (Seed -> (a, Seed)) -> m a
 
 instance Monad m => MonadRandom (RandomT m) where
   liftRandom = state
 
 instance MonadRandom IO where
-  liftRandom k = liftM (fst . k) Mersenne.newPureMT
+  liftRandom k = liftM (fst . k) newSeed
 
 instance MonadRandom m => MonadRandom (ReaderT r m) where
   liftRandom = lift . liftRandom
@@ -53,8 +59,21 @@ instance MonadRandom m => MonadRandom (StateT s m) where
 instance (MonadRandom m, Functor s) => MonadRandom (Coroutine s m) where
   liftRandom = lift . liftRandom
 
+
+------------------------------------------------------------------------------
+runRandomT :: Monad m => RandomT m a -> Seed -> m a
+runRandomT (RandomT s) = evalStateT s
+
+newSeed :: IO Seed
+newSeed = liftM Seed Mersenne.newPureMT
+
+liftMersenne :: MonadRandom m => (PureMT -> (a, PureMT)) -> m a
+liftMersenne = undefined
+
+
+------------------------------------------------------------------------------
 randomInt :: MonadRandom m => m Int
-randomInt = liftRandom Mersenne.randomInt
+randomInt = liftMersenne Mersenne.randomInt
 
 randomRInt :: MonadRandom m => (Int, Int) -> m Int
 randomRInt (l, u)
@@ -63,7 +82,7 @@ randomRInt (l, u)
   where bound x = l + x `mod` (u - l + 1)
 
 randomDouble :: MonadRandom m => m Double
-randomDouble = liftRandom Mersenne.randomDouble
+randomDouble = liftMersenne Mersenne.randomDouble
 
 randomBool :: MonadRandom m => Prob -> m Bool
 randomBool p = pick [(True, p), (False, 1 - p)]
