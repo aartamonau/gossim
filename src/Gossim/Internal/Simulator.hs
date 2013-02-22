@@ -5,6 +5,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 import Control.Lens (makeLenses, use, (+=))
+import Control.Monad.Trans (MonadIO)
+import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.State.Strict (StateT, MonadState)
 
 import Data.IntMap.Strict (IntMap)
@@ -13,10 +15,13 @@ import Gossim.Internal.Agent (Agent)
 import Gossim.Internal.Types (Time,
                               AgentId,
                               Rumor(Rumor), RumorId(RumorId))
-import Gossim.Internal.Random (Random, MonadRandom, randomRInt, randomMaybeM)
+import Gossim.Internal.Random (RandomT, MonadRandom, randomRInt, randomMaybeM)
 
-newtype Gossim a = Gossim (StateT GossimState Random a)
-                 deriving (Monad, MonadRandom, MonadState GossimState)
+
+------------------------------------------------------------------------------
+newtype Gossim a = Gossim (StateT GossimState (RandomT IO) a)
+                 deriving (Monad, MonadRandom, MonadState GossimState,
+                           MonadIO, MonadCatchIO)
 
 type GossimPure m = (Monad m, MonadRandom m, MonadState GossimState m)
 
@@ -83,5 +88,7 @@ createRumor size = do
   rid <- getNextRumorId
   return $ Rumor rid size
 
+
+------------------------------------------------------------------------------
 simulate :: Agent () -> GossimConfig -> IO ()
 simulate = undefined
