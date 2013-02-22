@@ -4,6 +4,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 
+import Prelude hiding (log)
+
 import Control.Lens (makeLenses, use, (+=))
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
@@ -11,6 +13,8 @@ import Control.Monad.Reader (ReaderT, MonadReader)
 import Control.Monad.State.Strict (StateT, MonadState)
 
 import Data.IntMap.Strict (IntMap)
+
+import System.Log.Simple (MonadLog(askLog), Log)
 
 import Gossim.Internal.Agent (Agent)
 import Gossim.Internal.Types (Time,
@@ -40,7 +44,9 @@ data GossimConfig =
                }
 
 data GossimState =
-  GossimState { _nextAgendId :: Int
+  GossimState { _log :: Log
+
+              , _nextAgendId :: Int
               , _agents      :: IntMap (Agent ())
 
               , _nextRumorId :: Int
@@ -49,6 +55,9 @@ data GossimState =
 
 makeLenses ''GossimState
 
+
+instance MonadLog Gossim where
+  askLog = use log
 
 ------------------------------------------------------------------------------
 defaultNewRumorRF :: RandomFunction (Maybe Rumor)
