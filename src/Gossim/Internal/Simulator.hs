@@ -72,8 +72,8 @@ instance MonadLog Gossim where
 
 ------------------------------------------------------------------------------
 runGossim :: Gossim a -> GossimConfig -> GossimState -> Seed -> IO a
-runGossim (Gossim a) config state seed =
-  runRandomT (evalStateT (runReaderT a config) state) seed
+runGossim (Gossim a) config state =
+  runRandomT (evalStateT (runReaderT a config) state)
 
 
 ------------------------------------------------------------------------------
@@ -99,13 +99,13 @@ defaultConfig =
 
 
 ------------------------------------------------------------------------------
-stationary :: a -> (Time -> a)
+stationary :: a -> Time -> a
 stationary = const
 
-forallAgents :: a -> (AgentId -> a)
+forallAgents :: a -> AgentId -> a
 forallAgents = const
 
-independent :: a -> (Time -> AgentId -> a)
+independent :: a -> Time -> AgentId -> a
 independent = stationary . forallAgents
 
 getNextRumorId :: GossimPure m => m RumorId
