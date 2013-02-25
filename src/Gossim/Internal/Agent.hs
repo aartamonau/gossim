@@ -25,10 +25,12 @@ import Control.Monad.Coroutine (Coroutine, mapMonad, suspend)
 import Data.Maybe (fromMaybe)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+import Data.Text (Text)
 import Data.Typeable (Typeable)
 
 import Gossim.Internal.Random (Random, MonadRandom(liftRandom))
 import Gossim.Internal.Types (AgentId, Rumor, RumorId(RumorId))
+import Gossim.Internal.Logging (MonadLogPure(doLog), Level)
 
 data ReceiveHandler s where
   Handler :: Typeable a => (a -> s) -> ReceiveHandler s
@@ -37,11 +39,13 @@ instance Functor ReceiveHandler where
   fmap f (Handler h) = Handler $ fmap f h
 
 data Action s where
+  Log :: Level -> Text -> s -> Action s
   Send :: Typeable msg => AgentId -> msg -> s -> Action s
   Discovered :: Rumor -> s -> Action s
   Receive :: [ReceiveHandler a] -> (a -> s) -> Action s
 
 instance Functor Action where
+  fmap f (Log level text s) = Log level text (f s)
   fmap f (Send dst msg s) = Send dst msg (f s)
   fmap f (Discovered r s) = Discovered r (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
@@ -62,6 +66,9 @@ instance MonadReader AgentEnv Agent where
 
 instance MonadRandom Agent where
   liftRandom = Agent . liftRandom
+
+instance MonadLogPure Agent where
+  doLog level text = Agent $ suspend (Log level text (return ()))
 
 
 ------------------------------------------------------------------------------
