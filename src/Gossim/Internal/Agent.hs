@@ -7,17 +7,28 @@ module Gossim.Internal.Agent
        , Action (Send, Receive, Discovered)
        , AgentEnv (AgentEnv, self, agents, rumors)
        , Agent (Agent, unAgent)
+       , send
+       , (!)
+       , receive
+       , discovered
+       , getAgents
+       , getSelf
+       , getRumor
        ) where
 
+import Control.Applicative ((<$>))
+import Control.Monad (join)
 import Control.Monad.Trans (MonadTrans(lift))
-import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader))
-import Control.Monad.Coroutine (Coroutine, mapMonad)
+import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader), asks)
+import Control.Monad.Coroutine (Coroutine, mapMonad, suspend)
 
+import Data.Maybe (fromMaybe)
 import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.Typeable (Typeable)
 
 import Gossim.Internal.Random (Random, MonadRandom(liftRandom))
-import Gossim.Internal.Types (AgentId, Rumor)
+import Gossim.Internal.Types (AgentId, Rumor, RumorId(RumorId))
 
 data ReceiveHandler s where
   Handler :: Typeable a => (a -> s) -> ReceiveHandler s
@@ -51,3 +62,28 @@ instance MonadReader AgentEnv Agent where
 
 instance MonadRandom Agent where
   liftRandom = Agent . liftRandom
+
+
+------------------------------------------------------------------------------
+send :: Typeable msg => AgentId -> msg -> Agent ()
+send dst msg = Agent $ suspend (Send dst msg (return ()))
+
+(!) :: Typeable msg => AgentId -> msg -> Agent ()
+(!) = send
+
+receive :: [ReceiveHandler (Agent a)] -> Agent a
+receive handlers = join $ Agent $ suspend (Receive handlers return)
+
+discovered :: Rumor -> Agent ()
+discovered rumor = Agent $ suspend (Discovered rumor (return ()))
+
+getAgents :: Agent [AgentId]
+getAgents = asks agents
+
+getSelf :: Agent AgentId
+getSelf = asks self
+
+getRumor :: RumorId -> Agent Rumor
+getRumor (RumorId rid) =
+  fromMaybe reportError . IntMap.lookup rid <$> asks rumors
+  where reportError = error $ "Impossible: no rumor with id " ++ show rid
