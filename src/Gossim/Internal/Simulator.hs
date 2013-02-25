@@ -6,8 +6,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Prelude hiding (log)
-
 import Control.Lens (makeLenses, use, (+=))
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
@@ -16,12 +14,6 @@ import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
 import Data.IntMap.Strict (IntMap)
 
-import System.Log.Simple (MonadLog(askLog), Log, Level(Trace, Debug, Fatal),
-                          Politics(Politics, politicsLow, politicsHigh),
-                          rule, root, newLog, constant,
-                          logger, text, console)
-import qualified System.Log.Simple as SimpleLog
-
 import Gossim.Internal.Agent (Agent)
 import Gossim.Internal.Types (Time,
                               AgentId,
@@ -29,6 +21,8 @@ import Gossim.Internal.Types (Time,
 import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
                                runRandomT, newSeed,
                                randomRInt, randomMaybeM)
+import Gossim.Internal.Logging (Log, Level(Trace), MonadLog(askLog),
+                                initLogging, debugM, scope)
 
 
 ------------------------------------------------------------------------------
@@ -54,7 +48,7 @@ data GossimConfig =
                }
 
 data GossimState =
-  GossimState { _log :: Log
+  GossimState { _logger :: Log
 
               , _nextAgendId :: Int
               , _agents      :: IntMap (Agent ())
@@ -67,7 +61,7 @@ makeLenses ''GossimState
 
 
 instance MonadLog Gossim where
-  askLog = use log
+  askLog = use logger
 
 
 ------------------------------------------------------------------------------
@@ -124,17 +118,11 @@ createRumor size = do
 ------------------------------------------------------------------------------
 simulate :: Agent () -> GossimConfig -> IO ()
 simulate agent config@(GossimConfig {logLevel}) = do
-  log  <- newLog (constant logRules) [logger text console]
+  logger <- initLogging logLevel
   seed <- newSeed
-  let initialState = GossimState { _log = log }
+  let initialState = GossimState { _logger = logger }
 
   runGossim doSimulate config initialState seed
 
-  where logPolitics = Politics { politicsLow  = logLevel
-                               , politicsHigh = Fatal
-                               }
-        logRules    = [rule root $ SimpleLog.use logPolitics]
-
-
 doSimulate :: Gossim ()
-doSimulate = SimpleLog.log Debug "test\n"
+doSimulate = scope "simulator" $ debugM "test" ()
