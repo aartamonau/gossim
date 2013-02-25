@@ -1,7 +1,11 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Gossim.Internal.Logging
        ( Log
        , Level(Trace, Debug, Info, Warning, Error, Fatal)
        , MonadLog(askLog)
+       , MonadLogPure(doLog)
        , initLogging
        , logM
        , traceM
@@ -15,6 +19,7 @@ module Gossim.Internal.Logging
 
 import Prelude hiding (log)
 
+import Data.Text (Text)
 import Data.Text.Lazy (toStrict)
 import Data.Text.Format (Format, format)
 import Data.Text.Format.Params (Params)
@@ -34,24 +39,32 @@ initLogging level = newLog (constant logRules) [logger text console]
                                , politicsHigh = Fatal
                                }
 
-------------------------------------------------------------------------------
-logM :: (Params ps, MonadLog m) => Level -> Format -> ps -> m ()
-logM level fmt = log level . toStrict . format fmt
 
-traceM :: (Params ps, MonadLog m) => Format -> ps -> m ()
+------------------------------------------------------------------------------
+class Monad m => MonadLogPure m where
+  doLog :: Level -> Text -> m ()
+
+instance MonadLog m => MonadLogPure m where
+  doLog = log
+
+------------------------------------------------------------------------------
+logM :: (Params ps, MonadLogPure m) => Level -> Format -> ps -> m ()
+logM level fmt = doLog level . toStrict . format fmt
+
+traceM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
 traceM = logM Trace
 
-debugM :: (Params ps, MonadLog m) => Format -> ps -> m ()
+debugM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
 debugM = logM Debug
 
-infoM :: (Params ps, MonadLog m) => Format -> ps -> m ()
+infoM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
 infoM = logM Info
 
-warningM :: (Params ps, MonadLog m) => Format -> ps -> m ()
+warningM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
 warningM = logM Warning
 
-errorM :: (Params ps, MonadLog m) => Format -> ps -> m ()
+errorM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
 errorM = logM Error
 
-fatalM :: (Params ps, MonadLog m) => Format -> ps -> m ()
+fatalM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
 fatalM = logM Fatal
