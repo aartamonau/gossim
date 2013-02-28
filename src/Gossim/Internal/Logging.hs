@@ -6,6 +6,7 @@ module Gossim.Internal.Logging
        , Level(Trace, Debug, Info, Warning, Error, Fatal)
        , MonadLog(askLog)
        , MonadLogPure(doLog)
+       , Only(Only)
        , initLogging
        , logM
        , traceM
@@ -21,7 +22,7 @@ import Prelude hiding (log)
 
 import Data.Text (Text)
 import Data.Text.Lazy (toStrict)
-import Data.Text.Format (Format, format)
+import Data.Text.Format (Format, Only(Only), format)
 import Data.Text.Format.Params (Params)
 
 import System.Log.Simple (MonadLog(askLog), Log,
