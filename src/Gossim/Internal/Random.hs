@@ -5,6 +5,7 @@ module Gossim.Internal.Random
        , Random
        , Seed
        , MonadRandom(liftRandom)
+       , runRandom
        , runRandomT
        , newSeed
        , randomInt
@@ -24,7 +25,8 @@ import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Identity (Identity)
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Strict (StateT,
-                                   MonadState(state), evalStateT)
+                                   MonadState(state),
+                                   evalStateT, evalState)
 import Control.Monad.Coroutine (Coroutine)
 
 import System.Random.Mersenne.Pure64 (PureMT)
@@ -63,6 +65,9 @@ instance (MonadRandom m, Functor s) => MonadRandom (Coroutine s m) where
 ------------------------------------------------------------------------------
 runRandomT :: Monad m => RandomT m a -> Seed -> m a
 runRandomT (RandomT s) = evalStateT s
+
+runRandom :: Random a -> Seed -> a
+runRandom (RandomT s) = evalState s
 
 newSeed :: IO Seed
 newSeed = liftM Seed Mersenne.newPureMT
