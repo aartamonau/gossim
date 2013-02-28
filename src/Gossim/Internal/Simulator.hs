@@ -6,7 +6,8 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Control.Lens (makeLenses, use, (+=))
+import Control.Applicative ((<$>))
+import Control.Lens (makeLenses, use, (<<%=))
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT)
@@ -33,7 +34,7 @@ newtype Gossim a =
             MonadState GossimState, MonadReader GossimConfig,
             MonadIO, MonadCatchIO)
 
-type GossimPure m = (Monad m, MonadRandom m,
+type GossimPure m = (Functor m, Monad m, MonadRandom m,
                      MonadState GossimState m, MonadReader GossimConfig m)
 
 type RandomFunction a = GossimPure m => Time -> AgentId -> m a
@@ -105,12 +106,9 @@ forallAgents = const
 independent :: a -> Time -> AgentId -> a
 independent = stationary . forallAgents
 
-getNextRumorId :: GossimPure m => m RumorId
-getNextRumorId = do
-  rid <- use nextRumorId
-  nextRumorId += 1
 
-  return $ RumorId rid
+getNextRumorId :: GossimPure m => m RumorId
+getNextRumorId = RumorId <$> (nextRumorId <<%= (+1))
 
 createRumor :: GossimPure m => Int -> m Rumor
 createRumor size = do
