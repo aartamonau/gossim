@@ -7,12 +7,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Control.Applicative ((<$>))
-import Control.Lens (makeLenses, use, (<<%=))
+import Control.Lens (makeLenses, use, (<<%=), (.=))
+import Control.Monad (replicateM)
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
-import Control.Monad.Reader (ReaderT, MonadReader, runReaderT)
+import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
+import Data.Text (Text)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap as IntMap
 
@@ -23,8 +25,10 @@ import Gossim.Internal.Types (Time,
 import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
                                runRandomT, newSeed,
                                randomRInt, randomMaybeM)
-import Gossim.Internal.Logging (Log, Level(Trace), MonadLog(askLog),
-                                initLogging, debugM, scope)
+import Gossim.Internal.Logging (Log, Level(Trace),
+                                MonadLog(askLog), Only(Only),
+                                initLogging,
+                                debugM, infoM, scope)
 
 
 ------------------------------------------------------------------------------
@@ -119,10 +123,12 @@ createRumor size = do
 getNextAgentId :: GossimPure m => m Int
 getNextAgentId = nextAgentId <<%= (+1)
 
+tick :: GossimPure m => m Time
+tick = time <<%= (+1)
 
 ------------------------------------------------------------------------------
-simulate :: Agent () -> GossimConfig -> IO ()
-simulate agent config@(GossimConfig {logLevel}) = do
+simulate :: Agent () -> Text -> GossimConfig -> IO ()
+simulate agent title config@(GossimConfig {logLevel}) = do
   logger <- initLogging logLevel
   seed <- newSeed
   let initialState = GossimState { _logger      = logger
@@ -133,7 +139,25 @@ simulate agent config@(GossimConfig {logLevel}) = do
                                  , _rumors      = IntMap.empty
                                  }
 
-  runGossim (scope "simulator" $ doSimulate agent) config initialState seed
+  runGossim (scope "simulator" $ doSimulate agent title) config initialState seed
 
-doSimulate :: Agent () -> Gossim ()
-doSimulate _ = debugM "test" ()
+doSimulate :: Agent () -> Text -> Gossim ()
+doSimulate agent title = do
+  infoM "Starting {} simulation" (Only title)
+  numAgents <- asks numAgents
+  agentIds  <- replicateM numAgents getNextAgentId
+  agents .= IntMap.fromList [(aid, agent) | aid <- agentIds]
+  infoM "Created {} agents" (Only numAgents)
+
+  step agent
+
+step :: Agent () -> Gossim ()
+step agent = do
+  time <- tick
+  done <- (time >=) <$> asks duration
+
+  if done
+    then infoM "Finished simulation after {} steps" (Only time)
+    else do
+      debugM "I don't do anything so far. This is {} step" (Only time)
+      step agent
