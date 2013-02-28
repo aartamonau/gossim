@@ -26,7 +26,7 @@ import Control.Monad.Identity (Identity)
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Strict (StateT,
                                    MonadState(state),
-                                   evalStateT, evalState)
+                                   runStateT, runState)
 import Control.Monad.Coroutine (Coroutine)
 
 import System.Random.Mersenne.Pure64 (PureMT)
@@ -63,11 +63,11 @@ instance (MonadRandom m, Functor s) => MonadRandom (Coroutine s m) where
 
 
 ------------------------------------------------------------------------------
-runRandomT :: Monad m => RandomT m a -> Seed -> m a
-runRandomT (RandomT s) = evalStateT s
+runRandomT :: Monad m => RandomT m a -> Seed -> m (a, Seed)
+runRandomT (RandomT s) = runStateT s
 
-runRandom :: Random a -> Seed -> a
-runRandom (RandomT s) = evalState s
+runRandom :: Random a -> Seed -> (a, Seed)
+runRandom (RandomT s) = runState s
 
 newSeed :: IO Seed
 newSeed = liftM Seed Mersenne.newPureMT
