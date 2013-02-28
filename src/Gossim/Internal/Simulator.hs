@@ -6,6 +6,8 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+
 import Control.Applicative ((<$>))
 import Control.Lens (makeLenses, use, (<<%=), (.=))
 import Control.Monad (replicateM)
