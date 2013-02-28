@@ -13,6 +13,7 @@ import Control.Monad.Reader (ReaderT, MonadReader, runReaderT)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
 import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap as IntMap
 
 import Gossim.Internal.Agent (Agent)
 import Gossim.Internal.Types (Time,
@@ -50,7 +51,9 @@ data GossimConfig =
 data GossimState =
   GossimState { _logger :: Log
 
-              , _nextAgendId :: Int
+              , _time :: Time
+
+              , _nextAgentId :: Int
               , _agents      :: IntMap (Agent ())
 
               , _nextRumorId :: Int
@@ -120,9 +123,15 @@ simulate :: Agent () -> GossimConfig -> IO ()
 simulate agent config@(GossimConfig {logLevel}) = do
   logger <- initLogging logLevel
   seed <- newSeed
-  let initialState = GossimState { _logger = logger }
+  let initialState = GossimState { _logger      = logger
+                                 , _time        = 0
+                                 , _nextAgentId = 0
+                                 , _agents      = IntMap.empty
+                                 , _nextRumorId = 0
+                                 , _rumors      = IntMap.empty
+                                 }
 
-  runGossim doSimulate config initialState seed
+  runGossim (scope "simulator" $ doSimulate agent) config initialState seed
 
-doSimulate :: Gossim ()
-doSimulate = scope "simulator" $ debugM "test" ()
+doSimulate :: Agent () -> Gossim ()
+doSimulate _ = debugM "test" ()
