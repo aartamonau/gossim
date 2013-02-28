@@ -30,7 +30,7 @@ import Gossim.Internal.Logging (Log, Level(Trace), MonadLog(askLog),
 ------------------------------------------------------------------------------
 newtype Gossim a =
   Gossim (ReaderT GossimConfig (StateT GossimState (RandomT IO)) a)
-  deriving (Monad, MonadRandom,
+  deriving (Functor, Monad, MonadRandom,
             MonadState GossimState, MonadReader GossimConfig,
             MonadIO, MonadCatchIO)
 
