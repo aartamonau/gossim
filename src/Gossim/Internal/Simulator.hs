@@ -116,6 +116,10 @@ createRumor size = do
   return $ Rumor rid size
 
 
+getNextAgentId :: GossimPure m => m Int
+getNextAgentId = nextAgentId <<%= (+1)
+
+
 ------------------------------------------------------------------------------
 simulate :: Agent () -> GossimConfig -> IO ()
 simulate agent config@(GossimConfig {logLevel}) = do
