@@ -25,7 +25,7 @@ import Gossim.Internal.Types (Time,
                               AgentId,
                               Rumor(Rumor), RumorId(RumorId))
 import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
-                               runRandomT, newSeed,
+                               evalRandomT, newSeed,
                                randomRInt, randomMaybeM)
 import Gossim.Internal.Logging (Log, Level(Trace),
                                 MonadLog(askLog), Only(Only),
@@ -77,7 +77,7 @@ instance MonadLog Gossim where
 ------------------------------------------------------------------------------
 runGossim :: Gossim a -> GossimConfig -> GossimState -> Seed -> IO a
 runGossim (Gossim a) config state =
-  runRandomT (evalStateT (runReaderT a config) state)
+  evalRandomT (evalStateT (runReaderT a config) state)
 
 
 ------------------------------------------------------------------------------
