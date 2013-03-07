@@ -4,7 +4,7 @@
 
 module Gossim.Internal.Types
        ( AgentId(AgentId)
-       , RumorId(RumorId)
+       , RumorId(RumorId, unRumorId)
        , Rumor(Rumor, rumorId, rumorSize)
        , Time
        , Prob
@@ -25,7 +25,7 @@ newtype AgentId = AgentId Int
 instance Buildable AgentId where
   build (AgentId aid) = mconcat [fromText "agent-", build aid]
 
-newtype RumorId = RumorId Int
+newtype RumorId = RumorId { unRumorId :: Int }
                 deriving Show
 
 data Rumor = Rumor { rumorId   :: RumorId

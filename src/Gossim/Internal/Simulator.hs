@@ -9,6 +9,7 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 import Control.Applicative ((<$>))
+import Control.Arrow ((&&&))
 import Control.Lens (makeLenses, use, (<<%=), (.=))
 import Control.Monad (replicateM)
 import Control.Monad.Trans (MonadIO)
@@ -23,7 +24,8 @@ import qualified Data.IntMap as IntMap
 import Gossim.Internal.Agent (Agent)
 import Gossim.Internal.Types (Time,
                               AgentId,
-                              Rumor(Rumor), RumorId(RumorId))
+                              Rumor(Rumor), RumorId(RumorId),
+                              rumorId, unRumorId)
 import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
                                evalRandomT, newSeed,
                                randomRInt, randomMaybeM)
@@ -121,6 +123,9 @@ createRumor size = do
   rid <- getNextRumorId
   return $ Rumor rid size
 
+rumorIdInt :: Rumor -> Int
+rumorIdInt = unRumorId . rumorId
+
 
 getNextAgentId :: GossimPure m => m Int
 getNextAgentId = nextAgentId <<%= (+1)
@@ -150,6 +155,10 @@ doSimulate agent title = do
   agentIds  <- replicateM numAgents getNextAgentId
   agents .= IntMap.fromList [(aid, agent) | aid <- agentIds]
   infoM "Created {} agents" (Only numAgents)
+
+  -- TODO: unfix this
+  rs <- replicateM 1000 (createRumor 100)
+  rumors .= IntMap.fromList (map (rumorIdInt &&& id) rs)
 
   step agent
 
