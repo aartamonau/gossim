@@ -9,6 +9,7 @@ module Gossim.Internal.Agent
        , Agent (Agent, unAgent)
        , AgentState
        , agentState
+       , newAgentState
        , bounce
        , send
        , (!)
@@ -20,8 +21,8 @@ module Gossim.Internal.Agent
        ) where
 
 import Control.Applicative ((<$>))
-import Control.Monad (join)
-import Control.Monad.Trans (MonadTrans(lift))
+import Control.Monad (join, liftM)
+import Control.Monad.Trans (MonadTrans(lift), MonadIO)
 import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader),
                              runReaderT, asks)
 import Control.Monad.Coroutine (Coroutine(resume), mapMonad, suspend)
@@ -32,7 +33,8 @@ import qualified Data.IntMap.Strict as IntMap
 import Data.Text (Text)
 import Data.Typeable (Typeable)
 
-import Gossim.Internal.Random (Random, Seed, MonadRandom(liftRandom), runRandom)
+import Gossim.Internal.Random (Random, Seed, MonadRandom(liftRandom),
+                               runRandom, newSeed)
 import Gossim.Internal.Types (AgentId, Rumor, RumorId(RumorId))
 import Gossim.Internal.Logging (MonadLogPure(doLog), Level)
 
@@ -80,6 +82,9 @@ instance MonadLogPure Agent where
 ------------------------------------------------------------------------------
 agentState :: Seed -> AgentState
 agentState = AgentState
+
+newAgentState :: MonadIO m => m AgentState
+newAgentState = liftM AgentState newSeed
 
 bounce :: Agent a -> AgentEnv -> AgentState
        -> (AgentState, Either (Action (Agent a)) a)
