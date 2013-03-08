@@ -22,7 +22,7 @@ module Gossim.Internal.Random
 
 import Control.Applicative (Applicative)
 import Control.Monad (liftM)
-import Control.Monad.Trans (lift, MonadIO)
+import Control.Monad.Trans (lift, MonadIO(liftIO))
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Identity (Identity)
 import Control.Monad.Reader (ReaderT)
@@ -77,8 +77,8 @@ evalRandomT (RandomT s) = evalStateT s
 evalRandom :: Random a -> Seed -> a
 evalRandom (RandomT s) = evalState s
 
-newSeed :: IO Seed
-newSeed = liftM Seed Mersenne.newPureMT
+newSeed :: MonadIO m => m Seed
+newSeed = liftIO $ liftM Seed Mersenne.newPureMT
 
 liftMersenne :: MonadRandom m => (PureMT -> (a, PureMT)) -> m a
 liftMersenne = undefined
