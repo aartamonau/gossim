@@ -31,6 +31,8 @@ import Data.Maybe (fromMaybe)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import Data.Text (Text)
+
+import Data.Dynamic (Dynamic, toDyn)
 import Data.Typeable (Typeable)
 
 import Gossim.Internal.Random (Random, Seed, MonadRandom(liftRandom),
@@ -46,7 +48,7 @@ instance Functor ReceiveHandler where
 
 data Action s where
   Log :: Level -> Text -> s -> Action s
-  Send :: Typeable msg => AgentId -> msg -> s -> Action s
+  Send :: AgentId -> Dynamic -> s -> Action s
   Discovered :: Rumor -> s -> Action s
   Receive :: [ReceiveHandler a] -> (a -> s) -> Action s
 
@@ -97,7 +99,7 @@ bounce (Agent c) env (AgentState seed) = (state, left (fmap Agent) c')
 
 ------------------------------------------------------------------------------
 send :: Typeable msg => AgentId -> msg -> Agent ()
-send dst msg = Agent $ suspend (Send dst msg (return ()))
+send dst msg = Agent $ suspend (Send dst (toDyn msg) (return ()))
 
 (!) :: Typeable msg => AgentId -> msg -> Agent ()
 (!) = send
