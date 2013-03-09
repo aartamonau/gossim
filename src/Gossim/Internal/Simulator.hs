@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ParallelListComp #-}
 
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
@@ -21,7 +22,7 @@ import Data.Text (Text)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap as IntMap
 
-import Gossim.Internal.Agent (Agent)
+import Gossim.Internal.Agent (Agent, AgentState, newAgentState)
 import Gossim.Internal.Types (Time,
                               AgentId,
                               Rumor(Rumor), RumorId(RumorId),
@@ -63,7 +64,7 @@ data GossimState =
               , _time :: Time
 
               , _nextAgentId :: Int
-              , _agents      :: IntMap (Agent ())
+              , _agents      :: IntMap (Agent (), AgentState)
 
               , _nextRumorId :: Int
               , _rumors      :: IntMap Rumor
@@ -153,7 +154,9 @@ doSimulate agent title = do
   infoM "Starting {} simulation" (Only title)
   numAgents <- asks numAgents
   agentIds  <- replicateM numAgents getNextAgentId
-  agents .= IntMap.fromList [(aid, agent) | aid <- agentIds]
+  agentStates <- replicateM numAgents newAgentState
+  agents .= IntMap.fromList [(aid, (agent, astate)) | aid <- agentIds
+                                                    | astate <- agentStates]
   infoM "Created {} agents" (Only numAgents)
 
   -- TODO: unfix this
