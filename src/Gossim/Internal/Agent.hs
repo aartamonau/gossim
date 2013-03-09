@@ -4,7 +4,7 @@
 
 module Gossim.Internal.Agent
        ( ReceiveHandler(Handler)
-       , Action (Send, Receive, Discovered)
+       , Action (Log, Send, Receive, Discovered)
        , AgentEnv (AgentEnv, self, agents, rumors)
        , Agent (Agent, unAgent)
        , AgentState
