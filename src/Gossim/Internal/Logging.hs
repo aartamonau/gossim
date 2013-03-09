@@ -16,13 +16,15 @@ module Gossim.Internal.Logging
        , errorM
        , fatalM
        , scope
+       , format
        ) where
 
 import Prelude hiding (log)
 
 import Data.Text (Text)
 import Data.Text.Lazy (toStrict)
-import Data.Text.Format (Format, Only(Only), format)
+import Data.Text.Format (Format, Only(Only))
+import qualified Data.Text.Format as Fmt
 import Data.Text.Format.Params (Params)
 
 import System.Log.Simple (MonadLog(askLog), Log,
@@ -48,9 +50,15 @@ class Monad m => MonadLogPure m where
 instance MonadLog m => MonadLogPure m where
   doLog = log
 
+
+------------------------------------------------------------------------------
+format :: Params ps => Format -> ps -> Text
+format fmt = toStrict . Fmt.format fmt
+
+
 ------------------------------------------------------------------------------
 logM :: (Params ps, MonadLogPure m) => Level -> Format -> ps -> m ()
-logM level fmt = doLog level . toStrict . format fmt
+logM level fmt = doLog level . format fmt
 
 traceM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
 traceM = logM Trace
