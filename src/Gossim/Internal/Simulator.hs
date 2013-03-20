@@ -6,25 +6,39 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE ViewPatterns #-}
 
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
+import Prelude hiding (mapM, mapM_)
+
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
-import Control.Lens (makeLenses, use, (<<%=), (.=))
+import Control.Lens (makeLenses, use, (%=), (<<%=), (.=))
 import Control.Monad (replicateM)
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
+import Data.Foldable (mapM_)
+import Data.Maybe (fromMaybe)
+import Data.Sequence (Seq, (|>))
+import qualified Data.Sequence as Seq
 import Data.Text (Text)
+
+import Data.Dynamic (Dynamic)
+
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap as IntMap
 
-import Gossim.Internal.Agent (Agent, AgentState, newAgentState)
+import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
+                              Action(Log, Send, Receive, Discovered),
+                              newAgentState, bounce)
+import qualified Gossim.Internal.Agent as Agent
+
 import Gossim.Internal.Types (Time,
-                              AgentId,
+                              AgentId(AgentId),
                               Rumor(Rumor), RumorId(RumorId),
                               rumorId, unRumorId)
 import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
@@ -33,7 +47,7 @@ import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
 import Gossim.Internal.Logging (Log, Level(Trace),
                                 MonadLog(askLog), Only(Only),
                                 initLogging,
-                                debugM, infoM, scope)
+                                logM, debugM, infoM, scope, format)
 
 
 ------------------------------------------------------------------------------
@@ -65,6 +79,8 @@ data GossimState =
 
               , _nextAgentId :: Int
               , _agents      :: IntMap (Agent (), AgentState)
+              , _messageQueues  :: IntMap (Seq Dynamic)
+              , _runnableAgents :: Seq Int
 
               , _nextRumorId :: Int
               , _rumors      :: IntMap Rumor
@@ -139,12 +155,14 @@ simulate :: Agent () -> Text -> GossimConfig -> IO ()
 simulate agent title config@(GossimConfig {logLevel}) = do
   logger <- initLogging logLevel
   seed <- newSeed
-  let initialState = GossimState { _logger      = logger
-                                 , _time        = 0
-                                 , _nextAgentId = 0
-                                 , _agents      = IntMap.empty
-                                 , _nextRumorId = 0
-                                 , _rumors      = IntMap.empty
+  let initialState = GossimState { _logger         = logger
+                                 , _time           = 0
+                                 , _nextAgentId    = 0
+                                 , _agents         = IntMap.empty
+                                 , _runnableAgents = Seq.empty
+                                 , _messageQueues  = IntMap.empty
+                                 , _nextRumorId    = 0
+                                 , _rumors         = IntMap.empty
                                  }
 
   runGossim (scope "simulator" $ doSimulate agent title) config initialState seed
@@ -157,6 +175,8 @@ doSimulate agent title = do
   agentStates <- replicateM numAgents newAgentState
   agents .= IntMap.fromList [(aid, (agent, astate)) | aid <- agentIds
                                                     | astate <- agentStates]
+  runnableAgents .= Seq.fromList agentIds
+  messageQueues .= IntMap.fromList [(aid, Seq.empty) | aid <- agentIds]
   infoM "Created {} agents" (Only numAgents)
 
   -- TODO: unfix this
@@ -172,6 +192,52 @@ step agent = do
 
   if done
     then infoM "Finished simulation after {} steps" (Only time)
-    else do
-      debugM "I don't do anything so far. This is {} step" (Only time)
-      step agent
+    else doStep agent
+
+doStep :: Agent () -> Gossim ()
+doStep _ = do
+  envRumors <- use rumors
+  envAgents <- map AgentId <$> IntMap.keys <$> use agents
+  let envTemplate = AgentEnv { Agent.self = error "Use of uninitialized self"
+                             , Agent.rumors = envRumors
+                             , Agent.agents = envAgents
+                             }
+  mapM_ (processRunnable envTemplate) =<< use runnableAgents
+  debugM "Processed all runnable agents" ()
+
+processRunnable :: AgentEnv -> Int -> Gossim ()
+processRunnable envTemplate aid = do
+  debugM "Processing runnable agent {}" (Only aid)
+  (agent, astate) <- getAgent aid
+  processAgent env aid agent astate
+
+  where env = envTemplate { Agent.self = AgentId aid }
+
+processAgent :: AgentEnv -> Int -> Agent () -> AgentState -> Gossim ()
+processAgent env aid agent astate =
+  case cont of
+    Right () -> do
+      infoM "Agent {} terminated" (Only aid)
+      agents %= IntMap.delete aid
+      messageQueues %= IntMap.delete aid
+    Left action -> do
+      agent' <- processAction aid action
+      agents %= IntMap.insert aid (agent', astate')
+  where (astate', cont) = bounce agent env astate
+
+processAction :: Int -> Action (Agent ()) -> Gossim (Agent ())
+processAction aid (Log level text s) = do
+  scope (format "{}" (Only $ AgentId aid)) $
+    logM level "{}" (Only text)
+  return s
+processAction _ (Send (AgentId dst) msg s) = do
+  messageQueues %= IntMap.update (Just . (|> msg)) dst
+  return s
+processAction aid (Receive _ c) = do
+  debugM "Ignoring receive from {}" (Only $ AgentId aid)
+  return $ c undefined
+processAction _ (Discovered _ s) = return s
+
+getAgent :: Int -> Gossim (Agent (), AgentState)
+getAgent aid = extract <$> IntMap.lookup aid <$> use agents
+  where extract = fromMaybe (error $ "Cannot find agent " ++ show aid)
