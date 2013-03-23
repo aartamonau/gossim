@@ -14,8 +14,8 @@ import Prelude hiding (mapM, mapM_)
 
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
-import Control.Lens (makeLenses, use, (%=), (<<%=), (<<.=), (.=))
-import Control.Monad (replicateM, when)
+import Control.Lens (makeLenses, use, uses, (%=), (<<%=), (<<.=), (.=))
+import Control.Monad (replicateM)
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
@@ -62,6 +62,8 @@ type GossimPure m = (Functor m, Monad m, MonadRandom m,
 
 type RandomFunction a = GossimPure m => Time -> AgentId -> m a
 
+data RunnableState = Runnable | Blocked
+
 data GossimConfig =
   GossimConfig { logLevel :: Level
 
@@ -79,6 +81,7 @@ data GossimState =
 
               , _nextAgentId :: Int
               , _agents      :: IntMap (Agent (), AgentState)
+              , _runnableStates :: IntMap RunnableState
               , _messageQueues  :: IntMap (Seq Dynamic)
               -- TODO: seems that it doesn't need to be a Seq; list will do as
               -- well
@@ -162,6 +165,7 @@ simulate agent title config@(GossimConfig {logLevel}) = do
                                  , _nextAgentId    = 0
                                  , _agents         = IntMap.empty
                                  , _runnableAgents = Seq.empty
+                                 , _runnableStates = IntMap.empty
                                  , _messageQueues  = IntMap.empty
                                  , _nextRumorId    = 0
                                  , _rumors         = IntMap.empty
@@ -178,6 +182,7 @@ doSimulate agent title = do
   agents .= IntMap.fromList [(aid, (agent, astate)) | aid <- agentIds
                                                     | astate <- agentStates]
   runnableAgents .= Seq.fromList agentIds
+  runnableStates .= IntMap.fromList [(aid, Runnable) | aid <- agentIds]
   messageQueues .= IntMap.fromList [(aid, Seq.empty) | aid <- agentIds]
   infoM "Created {} agents" (Only numAgents)
 
@@ -230,26 +235,49 @@ processAgent env aid agent astate =
       agents %= IntMap.delete aid
       messageQueues %= IntMap.delete aid
     Left action -> do
-      (agent', agentRunnable) <- processAction aid action
-      when agentRunnable (runnableAgents %= (|> aid))
+      agent' <- processAction aid action
       agents %= IntMap.insert aid (agent', astate')
   where (astate', cont) = bounce agent env astate
 
-processAction :: Int -> Action (Agent ()) -> Gossim (Agent (), Bool)
+processAction :: Int -> Action (Agent ()) -> Gossim (Agent ())
 processAction aid (Log level text s) = do
   scope (format "{}" (Only $ AgentId aid)) $
     logM level "{}" (Only text)
-  return (s, True)
-processAction _ (Send (AgentId dst) msg s) = do
+  setRunnable aid
+  return s
+processAction aid (Send (AgentId dst) msg s) = do
   messageQueues %= IntMap.update (Just . (|> msg)) dst
-  return (s, True)
+  setRunnable aid
+  setRunnable dst
+  return s
 processAction aid (Receive _ c) = do
-  debugM "Ignoring receive from {}" (Only $ AgentId aid)
-  return (c undefined, undefined)
-processAction _ (Discovered _ s) =
   -- TODO
-  return (s, True)
+  debugM "Ignoring receive from {}" (Only $ AgentId aid)
+  setBlocked aid
+  return $ c undefined
+processAction aid (Discovered _ s) = do
+  setRunnable aid
+  -- TODO
+  return s
 
 getAgent :: Int -> Gossim (Agent (), AgentState)
 getAgent aid = extract <$> IntMap.lookup aid <$> use agents
   where extract = fromMaybe (error $ "Cannot find agent " ++ show aid)
+
+getRunnableState :: Int -> Gossim RunnableState
+getRunnableState aid = uses runnableStates extract
+  where extract = fromMaybe reportError . IntMap.lookup aid
+        reportError = error ("getRunnableState: missing agent " ++ show aid)
+
+setRunnable :: Int -> Gossim ()
+setRunnable aid = do
+  old <- getRunnableState aid
+  case old of
+    Runnable -> return ()
+    Blocked -> do
+      runnableStates %= IntMap.insert aid Runnable
+      runnableAgents %= (|> aid)
+
+-- we assume that the agent is not in a runnable queue
+setBlocked :: Int -> Gossim ()
+setBlocked aid = runnableStates %= IntMap.insert aid Blocked
