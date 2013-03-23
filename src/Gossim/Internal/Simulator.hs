@@ -14,8 +14,8 @@ import Prelude hiding (mapM, mapM_)
 
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
-import Control.Lens (makeLenses, use, (%=), (<<%=), (.=))
-import Control.Monad (replicateM)
+import Control.Lens (makeLenses, use, (%=), (<<%=), (<<.=), (.=))
+import Control.Monad (replicateM, when)
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
@@ -80,6 +80,8 @@ data GossimState =
               , _nextAgentId :: Int
               , _agents      :: IntMap (Agent (), AgentState)
               , _messageQueues  :: IntMap (Seq Dynamic)
+              -- TODO: seems that it doesn't need to be a Seq; list will do as
+              -- well
               , _runnableAgents :: Seq Int
 
               , _nextRumorId :: Int
@@ -202,7 +204,12 @@ doStep _ = do
                              , Agent.rumors = envRumors
                              , Agent.agents = envAgents
                              }
-  mapM_ (processRunnable envTemplate) =<< use runnableAgents
+
+  -- runnableAgents gets updated for us by processRunnable; so we just have to
+  -- empty it before
+  runnable <- (runnableAgents <<.= Seq.empty)
+  mapM_ (processRunnable envTemplate) runnable
+
   debugM "Processed all runnable agents" ()
 
 processRunnable :: AgentEnv -> Int -> Gossim ()
@@ -221,22 +228,25 @@ processAgent env aid agent astate =
       agents %= IntMap.delete aid
       messageQueues %= IntMap.delete aid
     Left action -> do
-      agent' <- processAction aid action
+      (agent', agentRunnable) <- processAction aid action
+      when agentRunnable (runnableAgents %= (|> aid))
       agents %= IntMap.insert aid (agent', astate')
   where (astate', cont) = bounce agent env astate
 
-processAction :: Int -> Action (Agent ()) -> Gossim (Agent ())
+processAction :: Int -> Action (Agent ()) -> Gossim (Agent (), Bool)
 processAction aid (Log level text s) = do
   scope (format "{}" (Only $ AgentId aid)) $
     logM level "{}" (Only text)
-  return s
+  return (s, True)
 processAction _ (Send (AgentId dst) msg s) = do
   messageQueues %= IntMap.update (Just . (|> msg)) dst
-  return s
+  return (s, True)
 processAction aid (Receive _ c) = do
   debugM "Ignoring receive from {}" (Only $ AgentId aid)
-  return $ c undefined
-processAction _ (Discovered _ s) = return s
+  return (c undefined, undefined)
+processAction _ (Discovered _ s) =
+  -- TODO
+  return (s, True)
 
 getAgent :: Int -> Gossim (Agent (), AgentState)
 getAgent aid = extract <$> IntMap.lookup aid <$> use agents
