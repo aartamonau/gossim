@@ -194,7 +194,11 @@ step agent = do
 
   if done
     then infoM "Finished simulation after {} steps" (Only time)
-    else doStep agent
+    else do
+      debugM "Processing runnable agents (time {})" (Only time)
+      doStep agent
+      debugM "Finished processing (time {})" (Only time)
+      step agent
 
 doStep :: Agent () -> Gossim ()
 doStep _ = do
@@ -209,8 +213,6 @@ doStep _ = do
   -- empty it before
   runnable <- (runnableAgents <<.= Seq.empty)
   mapM_ (processRunnable envTemplate) runnable
-
-  debugM "Processed all runnable agents" ()
 
 processRunnable :: AgentEnv -> Int -> Gossim ()
 processRunnable envTemplate aid = do
