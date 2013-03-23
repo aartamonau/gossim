@@ -21,7 +21,7 @@ module Gossim.Internal.Agent
        ) where
 
 import Control.Applicative ((<$>))
-import Control.Monad (join, liftM)
+import Control.Monad (liftM, join)
 import Control.Monad.Trans (MonadTrans(lift), MonadIO)
 import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader),
                              runReaderT, asks)
@@ -40,17 +40,14 @@ import Gossim.Internal.Random (Random, Seed, MonadRandom(liftRandom),
 import Gossim.Internal.Types (AgentId, Rumor, RumorId(RumorId))
 import Gossim.Internal.Logging (MonadLogPure(doLog), Level)
 
-data ReceiveHandler s where
-  Handler :: Typeable a => (a -> s) -> ReceiveHandler s
-
-instance Functor ReceiveHandler where
-  fmap f (Handler h) = Handler $ fmap f h
+data ReceiveHandler r where
+  Handler :: Typeable a => (a -> Agent r) -> ReceiveHandler r
 
 data Action s where
   Log :: Level -> Text -> s -> Action s
   Send :: AgentId -> Dynamic -> s -> Action s
   Discovered :: Rumor -> s -> Action s
-  Receive :: [ReceiveHandler a] -> (a -> s) -> Action s
+  Receive :: [ReceiveHandler a] -> (Agent a -> s) -> Action s
 
 instance Functor Action where
   fmap f (Log level text s) = Log level text (f s)
@@ -104,7 +101,7 @@ send dst msg = Agent $ suspend (Send dst (toDyn msg) (return ()))
 (!) :: Typeable msg => AgentId -> msg -> Agent ()
 (!) = send
 
-receive :: [ReceiveHandler (Agent a)] -> Agent a
+receive :: [ReceiveHandler a] -> Agent a
 receive handlers = join $ Agent $ suspend (Receive handlers return)
 
 discovered :: Rumor -> Agent ()
