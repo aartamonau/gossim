@@ -66,7 +66,7 @@ type GossimPure m = (Functor m, Monad m, MonadRandom m,
 
 type RandomFunction a = GossimPure m => Time -> AgentId -> m a
 
-data RunnableState = Runnable | Blocked
+data RunnableState = Running | Runnable | Blocked
 
 data GossimConfig =
   GossimConfig { logLevel :: Level
@@ -244,7 +244,9 @@ processAgent env aid agent astate =
       infoM "Agent {} terminated" (Only aid)
       agents %= IntMap.delete aid
       messageQueues %= IntMap.delete aid
+      runnableStates %= IntMap.delete aid
     Left action -> do
+      setRunning aid
       maybeNewAgent <- processAction aid action
       case maybeNewAgent of
         Nothing -> return ()
@@ -311,13 +313,16 @@ setRunnable aid = do
   old <- getRunnableState aid
   case old of
     Runnable -> return ()
-    Blocked -> do
+    _ -> do
       runnableStates %= IntMap.insert aid Runnable
       runnableAgents %= (|> aid)
 
 -- we assume that the agent is not in a runnable queue
 setBlocked :: Int -> Gossim ()
 setBlocked aid = runnableStates %= IntMap.insert aid Blocked
+
+setRunning :: Int -> Gossim ()
+setRunning aid = runnableStates %= IntMap.insert aid Running
 
 getMessages :: Int -> Gossim (Seq Dynamic)
 getMessages aid = uses messageQueues extract
