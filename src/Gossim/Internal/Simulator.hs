@@ -263,8 +263,6 @@ processAction aid (Send (AgentId dst) msg s) = do
   setRunnable dst
   return $ Just s
 processAction aid (Receive handlers c) = do
-  -- TODO
-  debugM "Ignoring receive from {}" (Only $ AgentId aid)
   maybeCont <- findCont handlers <$> getMessages aid
   case maybeCont of
     Nothing -> do
