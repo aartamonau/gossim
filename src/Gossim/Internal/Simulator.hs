@@ -213,6 +213,7 @@ doStep _ = do
   envRumors <- use rumors
   envAgents <- map AgentId <$> IntMap.keys <$> use agents
   let envTemplate = AgentEnv { Agent.self = error "Use of uninitialized self"
+                             , Agent.master = head envAgents
                              , Agent.rumors = envRumors
                              , Agent.agents = envAgents
                              }

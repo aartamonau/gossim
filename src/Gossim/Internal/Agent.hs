@@ -5,7 +5,7 @@
 module Gossim.Internal.Agent
        ( ReceiveHandler(Handler)
        , Action (Log, Send, Receive, Discovered)
-       , AgentEnv (AgentEnv, self, agents, rumors)
+       , AgentEnv (AgentEnv, self, master, agents, rumors)
        , Agent (Agent, unAgent)
        , AgentState
        , agentState
@@ -18,9 +18,11 @@ module Gossim.Internal.Agent
        , getAgents
        , getSelf
        , getRumor
+       , getMaster
+       , isMaster
        ) where
 
-import Control.Applicative ((<$>))
+import Control.Applicative (Applicative, (<$>), (<*>))
 import Control.Monad (liftM, join)
 import Control.Monad.Trans (MonadTrans(lift), MonadIO)
 import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader),
@@ -56,13 +58,14 @@ instance Functor Action where
   fmap f (Receive handlers s) = Receive handlers (f . s)
 
 data AgentEnv = AgentEnv { self   :: AgentId
+                         , master :: AgentId
                          , agents :: [AgentId]
                          , rumors :: IntMap Rumor
                          }
 
 newtype Agent a =
   Agent { unAgent :: Coroutine Action (ReaderT AgentEnv Random) a }
-  deriving (Monad, Functor)
+  deriving (Monad, Functor, Applicative)
 
 newtype AgentState = AgentState Seed
 
@@ -117,3 +120,9 @@ getRumor :: RumorId -> Agent Rumor
 getRumor (RumorId rid) =
   fromMaybe reportError . IntMap.lookup rid <$> asks rumors
   where reportError = error $ "Impossible: no rumor with id " ++ show rid
+
+getMaster :: Agent AgentId
+getMaster = asks master
+
+isMaster :: Agent Bool
+isMaster = (==) <$> getSelf <*> getMaster
