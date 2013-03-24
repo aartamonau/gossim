@@ -23,6 +23,7 @@ import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
 import Data.Foldable (mapM_)
+import Data.List (delete)
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq, ViewL(EmptyL, (:<)), (|>))
 import qualified Data.Sequence as Seq
@@ -229,7 +230,12 @@ processRunnable envTemplate aid = do
   (agent, astate) <- getAgent aid
   processAgent env aid agent astate
 
-  where env = envTemplate { Agent.self = AgentId aid }
+  where env = envTemplate { Agent.self = agentId
+                          -- I might want to do something smarter than this
+                          , Agent.agents = agentId `delete` agents
+                          }
+        agentId = AgentId aid
+        agents = Agent.agents envTemplate
 
 processAgent :: AgentEnv -> Int -> Agent () -> AgentState -> Gossim ()
 processAgent env aid agent astate =
