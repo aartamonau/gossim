@@ -20,7 +20,7 @@ type Time = Word64
 type Prob = Double
 
 newtype AgentId = AgentId Int
-                deriving Eq
+                deriving (Eq, Typeable)
 
 instance Buildable AgentId where
   build (AgentId aid) = mconcat [fromText "agent-", build aid]
