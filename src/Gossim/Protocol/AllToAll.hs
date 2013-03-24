@@ -9,7 +9,7 @@ import Control.Monad (forever)
 
 import Gossim (Agent, Rumor,
                ReceiveHandler(Handler),
-               receive, (!), getAgents, discovered)
+               receiveMany, (!), getAgents, discovered)
 
 import Data.Typeable (Typeable)
 
@@ -19,8 +19,8 @@ data Message = RemoteRumor Rumor
 agent :: Agent ()
 agent =
   forever $
-    receive [Handler $ \(r :: Rumor) -> handleNewRumor r,
-             Handler $ \(m :: Message) -> handleMessage m]
+    receiveMany [Handler $ \(r :: Rumor) -> handleNewRumor r,
+                 Handler $ \(m :: Message) -> handleMessage m]
 
   where handleNewRumor :: Rumor -> Agent ()
         handleNewRumor rumor = do

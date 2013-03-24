@@ -14,6 +14,7 @@ module Gossim.Internal.Agent
        , send
        , (!)
        , receive
+       , receiveMany
        , discovered
        , getAgents
        , getSelf
@@ -104,8 +105,11 @@ send dst msg = Agent $ suspend (Send dst (toDyn msg) (return ()))
 (!) :: Typeable msg => AgentId -> msg -> Agent ()
 (!) = send
 
-receive :: [ReceiveHandler a] -> Agent a
-receive handlers = join $ Agent $ suspend (Receive handlers return)
+receive :: Typeable a => (a -> Agent r) -> Agent r
+receive h = receiveMany [Handler h]
+
+receiveMany :: [ReceiveHandler a] -> Agent a
+receiveMany handlers = join $ Agent $ suspend (Receive handlers return)
 
 discovered :: Rumor -> Agent ()
 discovered rumor = Agent $ suspend (Discovered rumor (return ()))
