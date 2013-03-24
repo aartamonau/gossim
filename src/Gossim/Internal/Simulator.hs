@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
@@ -23,17 +24,19 @@ import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
 import Data.Foldable (mapM_)
 import Data.Maybe (fromMaybe)
-import Data.Sequence (Seq, (|>))
+import Data.Sequence (Seq, ViewL(EmptyL, (:<)), (|>))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 
-import Data.Dynamic (Dynamic)
+import Data.Dynamic (Dynamic, fromDynamic)
+import Data.Typeable (cast)
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap as IntMap
 
 import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
                               Action(Log, Send, Receive, Discovered),
+                              ReceiveHandler(Handler),
                               newAgentState, bounce)
 import qualified Gossim.Internal.Agent as Agent
 
@@ -235,30 +238,59 @@ processAgent env aid agent astate =
       agents %= IntMap.delete aid
       messageQueues %= IntMap.delete aid
     Left action -> do
-      agent' <- processAction aid action
-      agents %= IntMap.insert aid (agent', astate')
+      maybeNewAgent <- processAction aid action
+      case maybeNewAgent of
+        Nothing -> return ()
+        Just newAgent -> agents %= IntMap.insert aid (newAgent, astate')
   where (astate', cont) = bounce agent env astate
 
-processAction :: Int -> Action (Agent ()) -> Gossim (Agent ())
+processAction :: Int -> Action (Agent ()) -> Gossim (Maybe (Agent ()))
 processAction aid (Log level text s) = do
   scope (format "{}" (Only $ AgentId aid)) $
     logM level "{}" (Only text)
   setRunnable aid
-  return s
+  return $ Just s
 processAction aid (Send (AgentId dst) msg s) = do
   messageQueues %= IntMap.update (Just . (|> msg)) dst
   setRunnable aid
   setRunnable dst
-  return s
-processAction aid (Receive _ c) = do
+  return $ Just s
+processAction aid (Receive handlers c) = do
   -- TODO
   debugM "Ignoring receive from {}" (Only $ AgentId aid)
-  setBlocked aid
-  return $ c undefined
+  maybeCont <- findCont handlers <$> getMessages aid
+  case maybeCont of
+    Nothing -> do
+      setBlocked aid
+      return Nothing
+    Just cont -> do
+      setRunnable aid
+      return $ Just (c cont)
+    where findCont :: [ReceiveHandler r] -> Seq Dynamic -> Maybe (Agent r)
+          findCont hs msgs = goMsgs msgs
+            where goMsgs (Seq.viewl -> EmptyL) = Nothing
+                  goMsgs (Seq.viewl -> msg :< rest) =
+                    case goHandlers msg hs of
+                      Nothing -> goMsgs rest
+                      r       -> r
+                  -- silence bogus non-exhaustive pattern warning
+                  goMsgs _ = error "impossible"
+
+                  goHandlers _ [] = Nothing
+                  goHandlers msg (h : hs) =
+                    case tryHandler h msg of
+                      Nothing -> goHandlers msg hs
+                      r       -> r
+
+          tryHandler :: ReceiveHandler r -> Dynamic -> Maybe (Agent r)
+          tryHandler (Handler (h :: a -> Agent r)) msg =
+            maybeMsg >>= cast >>= return . h
+            where maybeMsg :: Maybe a
+                  maybeMsg = fromDynamic msg
 processAction aid (Discovered _ s) = do
   setRunnable aid
   -- TODO
-  return s
+  return (Just s)
 
 getAgent :: Int -> Gossim (Agent (), AgentState)
 getAgent aid = extract <$> IntMap.lookup aid <$> use agents
@@ -281,3 +313,8 @@ setRunnable aid = do
 -- we assume that the agent is not in a runnable queue
 setBlocked :: Int -> Gossim ()
 setBlocked aid = runnableStates %= IntMap.insert aid Blocked
+
+getMessages :: Int -> Gossim (Seq Dynamic)
+getMessages aid = uses messageQueues extract
+  where extract = fromMaybe reportError . IntMap.lookup aid
+        reportError = error ("getMessages: missing agent " ++ show aid)
