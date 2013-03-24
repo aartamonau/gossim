@@ -204,9 +204,8 @@ step agent = do
   if done
     then infoM "Finished simulation after {} steps" (Only time)
     else do
-      debugM "Processing runnable agents (time {})" (Only time)
+      debugM "Time {}" (Only time)
       doStep agent
-      debugM "Finished processing (time {})" (Only time)
       step agent
 
 doStep :: Agent () -> Gossim ()
@@ -222,6 +221,7 @@ doStep _ = do
   -- runnableAgents gets updated for us by processRunnable; so we just have to
   -- empty it before
   runnable <- (runnableAgents <<.= Seq.empty)
+  debugM "Found {} runnable agent(s)" (Only $ Seq.length runnable)
   mapM_ (processRunnable envTemplate) runnable
 
 processRunnable :: AgentEnv -> Int -> Gossim ()
@@ -260,11 +260,13 @@ processAction aid (Log level text s) = do
   setRunnable aid
   return $ Just s
 processAction aid (Send (AgentId dst) msg s) = do
+  debugM "Processing send (agent {})" (Only aid)
   messageQueues %= IntMap.update (Just . (|> msg)) dst
   setRunnable aid
   setRunnable dst
   return $ Just s
 processAction aid (Receive handlers c) = do
+  debugM "Processing receive (agent {})" (Only aid)
   maybeCont <- findCont handlers <$> getMessages aid
   case maybeCont of
     Nothing -> do
@@ -295,6 +297,7 @@ processAction aid (Receive handlers c) = do
             where maybeMsg :: Maybe a
                   maybeMsg = fromDynamic msg
 processAction aid (Discovered _ s) = do
+  debugM "Processing discovery event (agent {})" (Only aid)
   setRunnable aid
   -- TODO
   return (Just s)
