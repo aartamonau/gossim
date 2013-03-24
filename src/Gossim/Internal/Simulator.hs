@@ -16,7 +16,7 @@ import Prelude hiding (mapM, mapM_)
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
 import Control.Lens (makeLenses, use, uses, (%=), (<<%=), (<<.=), (.=))
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, liftM)
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
@@ -274,7 +274,7 @@ processAction aid (Receive handlers c) = do
       setRunnable aid
       return $ Just (c cont)
     where findCont :: [ReceiveHandler r] -> Seq Dynamic -> Maybe (Agent r)
-          findCont hs msgs = goMsgs msgs
+          findCont hs = goMsgs
             where goMsgs (Seq.viewl -> EmptyL) = Nothing
                   goMsgs (Seq.viewl -> msg :< rest) =
                     case goHandlers msg hs of
@@ -291,7 +291,7 @@ processAction aid (Receive handlers c) = do
 
           tryHandler :: ReceiveHandler r -> Dynamic -> Maybe (Agent r)
           tryHandler (Handler (h :: a -> Agent r)) msg =
-            maybeMsg >>= cast >>= return . h
+            liftM h (maybeMsg >>= cast)
             where maybeMsg :: Maybe a
                   maybeMsg = fromDynamic msg
 processAction aid (Discovered _ s) = do
