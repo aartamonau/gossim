@@ -17,5 +17,4 @@ import Gossim.Internal.Random (MonadRandom,
 import Gossim.Internal.Logging (Level(Trace, Debug, Info, Warning, Error, Fatal),
                                 Only(Only),
                                 logM, traceM, debugM, infoM,
-                                warningM, errorM, fatalM,
-                                scope, format)
+                                warningM, errorM, fatalM, format)
