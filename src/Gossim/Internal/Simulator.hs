@@ -15,14 +15,14 @@ import Prelude hiding (mapM, mapM_)
 
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
-import Control.Lens (makeLenses, use, uses, (%=), (<<%=), (<<.=), (.=))
+import Control.Lens (makeLenses, use, uses, mapMOf_,
+                     (%=), (<<%=), (<<.=), (.=))
 import Control.Monad (replicateM, liftM)
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
-import Data.Foldable (mapM_)
 import Data.List (delete)
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq, ViewL(EmptyL, (:<)), (|>))
@@ -34,6 +34,10 @@ import Data.Typeable (cast)
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap as IntMap
+
+import Data.IntSet (IntSet)
+import Data.IntSet.Lens (members)
+import qualified Data.IntSet as IntSet
 
 import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
                               Action(Log, Send, Receive, Discovered),
@@ -87,9 +91,7 @@ data GossimState =
               , _agents      :: IntMap (Agent (), AgentState)
               , _runnableStates :: IntMap RunnableState
               , _messageQueues  :: IntMap (Seq Dynamic)
-              -- TODO: seems that it doesn't need to be a Seq; list will do as
-              -- well
-              , _runnableAgents :: Seq Int
+              , _runnableAgents :: IntSet
 
               , _nextRumorId :: Int
               , _rumors      :: IntMap Rumor
@@ -168,7 +170,7 @@ simulate agent title config@(GossimConfig {logLevel}) = do
                                  , _time           = 0
                                  , _nextAgentId    = 0
                                  , _agents         = IntMap.empty
-                                 , _runnableAgents = Seq.empty
+                                 , _runnableAgents = IntSet.empty
                                  , _runnableStates = IntMap.empty
                                  , _messageQueues  = IntMap.empty
                                  , _nextRumorId    = 0
@@ -185,7 +187,7 @@ doSimulate agent title = do
   agentStates <- replicateM numAgents newAgentState
   agents .= IntMap.fromList [(aid, (agent, astate)) | aid <- agentIds
                                                     | astate <- agentStates]
-  runnableAgents .= Seq.fromList agentIds
+  runnableAgents .= IntSet.fromList agentIds
   runnableStates .= IntMap.fromList [(aid, Runnable) | aid <- agentIds]
   messageQueues .= IntMap.fromList [(aid, Seq.empty) | aid <- agentIds]
   infoM "Created {} agents" (Only numAgents)
@@ -220,9 +222,9 @@ doStep _ = do
 
   -- runnableAgents gets updated for us by processRunnable; so we just have to
   -- empty it before
-  runnable <- (runnableAgents <<.= Seq.empty)
-  debugM "Found {} runnable agent(s)" (Only $ Seq.length runnable)
-  mapM_ (processRunnable envTemplate) runnable
+  runnable <- (runnableAgents <<.= IntSet.empty)
+  debugM "Found {} runnable agent(s)" (Only $ IntSet.size runnable)
+  mapMOf_ members (processRunnable envTemplate) runnable
 
 processRunnable :: AgentEnv -> Int -> Gossim ()
 processRunnable envTemplate aid = do
@@ -316,16 +318,13 @@ getRunnableState aid = uses runnableStates extract
 
 setRunnable :: Int -> Gossim ()
 setRunnable aid = do
-  old <- getRunnableState aid
-  case old of
-    Runnable -> return ()
-    _ -> do
-      runnableStates %= IntMap.insert aid Runnable
-      runnableAgents %= (|> aid)
+  runnableStates %= IntMap.insert aid Runnable
+  runnableAgents %= IntSet.insert aid
 
--- we assume that the agent is not in a runnable queue
 setBlocked :: Int -> Gossim ()
-setBlocked aid = runnableStates %= IntMap.insert aid Blocked
+setBlocked aid = do
+  runnableStates %= IntMap.insert aid Blocked
+  runnableAgents %= IntSet.delete aid
 
 setRunning :: Int -> Gossim ()
 setRunning aid = runnableStates %= IntMap.insert aid Running
