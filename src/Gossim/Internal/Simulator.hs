@@ -266,13 +266,16 @@ processAction aid (Send (AgentId dst) msg s) = do
   setRunnable dst
   return $ Just s
 processAction aid (Receive handlers c) = do
-  debugM "Processing receive (agent {})" (Only aid)
-  maybeCont <- findCont handlers <$> getMessages aid
+  messages <- getMessages aid
+  debugM ("Processing receive (agent {}). \
+           \We have {} messages in the queue") (aid, Seq.length messages)
+  let maybeCont = findCont handlers messages
   case maybeCont of
     Nothing -> do
       setBlocked aid
       return Nothing
     Just cont -> do
+      debugM "Found matching receive handler" ()
       setRunnable aid
       return $ Just (c cont)
     where findCont :: [ReceiveHandler r] -> Seq Dynamic -> Maybe (Agent r)
