@@ -17,7 +17,7 @@ import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
 import Control.Lens (makeLenses, use, uses, mapMOf_, folded, _2,
                      (%=), (<<%=), (<<.=), (.=))
-import Control.Monad (replicateM, liftM)
+import Control.Monad (replicateM, liftM, forM_)
 import Control.Monad.Trans (MonadIO)
 import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
@@ -25,7 +25,7 @@ import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
 import Data.List (delete)
 import Data.Maybe (fromMaybe)
-import Data.Sequence (Seq, ViewL(EmptyL, (:<)), (|>))
+import Data.Sequence (Seq, ViewL(EmptyL, (:<)), (><), (|>))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 
@@ -326,19 +326,21 @@ processAction aid (Receive handlers c) = do
     Nothing -> do
       setBlocked aid
       return Nothing
-    Just cont -> do
+    Just (cont, messages') -> do
       debugM "Found matching receive handler" ()
+      messageQueues %= IntMap.insert aid messages'
       setRunnable aid
       return $ Just (c cont)
-    where findCont :: [ReceiveHandler r] -> Seq Dynamic -> Maybe (Agent r)
-          findCont hs = goMsgs
-            where goMsgs (Seq.viewl -> EmptyL) = Nothing
-                  goMsgs (Seq.viewl -> msg :< rest) =
+    where findCont :: [ReceiveHandler r] -> Seq Dynamic
+                   -> Maybe (Agent r, Seq Dynamic)
+          findCont hs msgs = goMsgs msgs Seq.empty
+            where goMsgs (Seq.viewl -> EmptyL) _ = Nothing
+                  goMsgs (Seq.viewl -> msg :< rest) r =
                     case goHandlers msg hs of
-                      Nothing -> goMsgs rest
-                      r       -> r
+                      Nothing -> goMsgs rest (r |> msg)
+                      Just c  -> Just (c, r >< rest)
                   -- silence bogus non-exhaustive pattern warning
-                  goMsgs _ = error "impossible"
+                  goMsgs _ _ = error "impossible"
 
                   goHandlers _ [] = Nothing
                   goHandlers msg (h : hs) =
