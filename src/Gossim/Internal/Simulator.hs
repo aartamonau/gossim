@@ -240,20 +240,38 @@ processRunnable envTemplate aid = do
         agents = Agent.agents envTemplate
 
 processAgent :: AgentEnv -> Int -> Agent () -> AgentState -> Gossim ()
-processAgent env aid agent astate =
-  case cont of
-    Right () -> do
+processAgent env aid agent astate = do
+  maybeNewAgentAndState <- doProcessAgent env aid agent astate
+  case maybeNewAgentAndState of
+    Nothing -> do
       infoM "Agent {} terminated" (Only aid)
       agents %= IntMap.delete aid
       messageQueues %= IntMap.delete aid
       runnableStates %= IntMap.delete aid
+    Just (agent', astate') ->
+      agents %= IntMap.insert aid (agent', astate')
+
+doProcessAgent :: AgentEnv -> Int -> Agent () -> AgentState
+               -> Gossim (Maybe (Agent (), AgentState))
+doProcessAgent env aid agent astate =
+  case cont of
+    Right () ->
+      return Nothing
     Left action -> do
       setRunning aid
       maybeNewAgent <- processAction aid action
       case maybeNewAgent of
-        Nothing -> return ()
-        Just newAgent -> agents %= IntMap.insert aid (newAgent, astate')
+        Nothing -> return $ Just (agent, astate)
+        Just newAgent -> do
+          proceed <- not <$> takesTick action
+          if proceed
+            then doProcessAgent env aid newAgent astate'
+            else return $ Just (newAgent, astate')
   where (astate', cont) = bounce agent env astate
+
+takesTick :: Action (Agent ()) -> Gossim Bool
+takesTick (Log _ _ _) = return False
+takesTick _           = return True
 
 processAction :: Int -> Action (Agent ()) -> Gossim (Maybe (Agent ()))
 processAction aid (Log level text s) = do
