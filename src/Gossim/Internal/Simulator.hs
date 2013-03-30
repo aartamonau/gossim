@@ -15,7 +15,7 @@ import Prelude hiding (mapM, mapM_)
 
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
-import Control.Lens (makeLenses, use, uses, mapMOf_,
+import Control.Lens (makeLenses, use, uses, mapMOf_, folded, _2,
                      (%=), (<<%=), (<<.=), (.=))
 import Control.Monad (replicateM, liftM)
 import Control.Monad.Trans (MonadIO)
@@ -38,6 +38,9 @@ import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
 import Data.IntSet.Lens (members)
 import qualified Data.IntSet as IntSet
+
+import Data.PQueue.Prio.Min (MinPQueue)
+import qualified Data.PQueue.Prio.Min as PQueue
 
 import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
                               Action(Log, Send, Receive, Discovered),
@@ -82,10 +85,18 @@ data GossimConfig =
                , agentFailureRF :: RandomFunction Bool
                }
 
+type Nonce = Int
+data SideEffect = Message Int Dynamic
+
 data GossimState =
   GossimState { _logger :: Log
 
               , _time :: Time
+
+                -- MinPQueue is not stable so this is used to preserve the
+                -- order of side-effects
+              , _sideEffectNonce :: Nonce
+              , _pendingSideEffects :: MinPQueue (Time, Nonce) SideEffect
 
               , _nextAgentId :: Int
               , _agents      :: IntMap (Agent (), AgentState)
@@ -161,20 +172,25 @@ getNextAgentId = nextAgentId <<%= (+1)
 tick :: GossimPure m => m Time
 tick = time <<%= (+1)
 
+getTime :: GossimPure m => m Time
+getTime = use time
+
 ------------------------------------------------------------------------------
 simulate :: Agent () -> Text -> GossimConfig -> IO ()
 simulate agent title config@(GossimConfig {logLevel}) = do
   logger <- initLogging logLevel
   seed <- newSeed
-  let initialState = GossimState { _logger         = logger
-                                 , _time           = 0
-                                 , _nextAgentId    = 0
-                                 , _agents         = IntMap.empty
-                                 , _runnableAgents = IntSet.empty
-                                 , _runnableStates = IntMap.empty
-                                 , _messageQueues  = IntMap.empty
-                                 , _nextRumorId    = 0
-                                 , _rumors         = IntMap.empty
+  let initialState = GossimState { _logger             = logger
+                                 , _time               = 0
+                                 , _sideEffectNonce    = 0
+                                 , _pendingSideEffects = PQueue.empty
+                                 , _nextAgentId        = 0
+                                 , _agents             = IntMap.empty
+                                 , _runnableAgents     = IntSet.empty
+                                 , _runnableStates     = IntMap.empty
+                                 , _messageQueues      = IntMap.empty
+                                 , _nextRumorId        = 0
+                                 , _rumors             = IntMap.empty
                                  }
 
   runGossim (scope "simulator" $ doSimulate agent title) config initialState seed
@@ -201,14 +217,30 @@ doSimulate agent title = do
 step :: Agent () -> Gossim ()
 step agent = do
   time <- tick
+  resetNonce
   done <- (time >=) <$> asks duration
 
   if done
     then infoM "Finished simulation after {} steps" (Only time)
     else do
       debugM "Time {}" (Only time)
+      processPendingSideEffects
       doStep agent
       step agent
+
+processPendingSideEffects :: Gossim ()
+processPendingSideEffects = do
+  time <- getTime
+  let pred (ts, _) _ = ts <= time
+  (sideEffects, pending') <- PQueue.spanWithKey pred <$> use pendingSideEffects
+  pendingSideEffects .= pending'
+  debugM "Found {} pending side-effects" (Only $ length sideEffects)
+  mapMOf_ (folded._2) processSideEffect sideEffects
+
+processSideEffect :: SideEffect -> Gossim ()
+processSideEffect (Message dst msg) = do
+  messageQueues %= IntMap.update (Just . (|> msg)) dst
+  setRunnable dst
 
 doStep :: Agent () -> Gossim ()
 doStep _ = do
@@ -281,9 +313,8 @@ processAction aid (Log level text s) = do
   return $ Just s
 processAction aid (Send (AgentId dst) msg s) = do
   debugM "Processing send (agent {})" (Only aid)
-  messageQueues %= IntMap.update (Just . (|> msg)) dst
+  queueSideEffect 0 (Message dst msg)
   setRunnable aid
-  setRunnable dst
   return $ Just s
 processAction aid (Receive handlers c) = do
   messages <- getMessages aid
@@ -351,3 +382,17 @@ getMessages :: Int -> Gossim (Seq Dynamic)
 getMessages aid = uses messageQueues extract
   where extract = fromMaybe reportError . IntMap.lookup aid
         reportError = error ("getMessages: missing agent " ++ show aid)
+
+resetNonce :: Gossim ()
+resetNonce = sideEffectNonce .= 0
+
+nextNonce :: Gossim Nonce
+nextNonce = sideEffectNonce <<%= (+1)
+
+queueSideEffect :: Time -> SideEffect -> Gossim ()
+queueSideEffect delay effect
+  | delay >= 0 = do
+    expiryTime <- (+ delay) <$> getTime
+    nonce <- nextNonce
+    pendingSideEffects %= PQueue.insert (expiryTime, nonce) effect
+  | otherwise = error $ "queueSideEffect: got invalid delay " ++ show delay
