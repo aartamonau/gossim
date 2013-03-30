@@ -4,13 +4,14 @@
 
 module Gossim.Internal.Agent
        ( ReceiveHandler(Handler)
-       , Action (Log, Send, Receive, Discovered)
+       , Action (Log, Broadcast, Receive, Discovered)
        , AgentEnv (AgentEnv, self, master, agents, rumors)
        , Agent (Agent, unAgent)
        , AgentState
        , agentState
        , newAgentState
        , bounce
+       , broadcast
        , send
        , (!)
        , receive
@@ -48,13 +49,13 @@ data ReceiveHandler r where
 
 data Action s where
   Log :: Level -> Text -> s -> Action s
-  Send :: AgentId -> Dynamic -> s -> Action s
+  Broadcast :: [AgentId] -> Dynamic -> s -> Action s
   Discovered :: Rumor -> s -> Action s
   Receive :: [ReceiveHandler a] -> (Agent a -> s) -> Action s
 
 instance Functor Action where
   fmap f (Log level text s) = Log level text (f s)
-  fmap f (Send dst msg s) = Send dst msg (f s)
+  fmap f (Broadcast dst msg s) = Broadcast dst msg (f s)
   fmap f (Discovered r s) = Discovered r (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
 
@@ -99,8 +100,11 @@ bounce (Agent c) env (AgentState seed) = (state, left (fmap Agent) c')
         left _ (Right x) = Right x
 
 ------------------------------------------------------------------------------
+broadcast :: Typeable msg => [AgentId] -> msg -> Agent ()
+broadcast dsts msg = Agent $ suspend (Broadcast dsts (toDyn msg) (return ()))
+
 send :: Typeable msg => AgentId -> msg -> Agent ()
-send dst msg = Agent $ suspend (Send dst (toDyn msg) (return ()))
+send dst = broadcast [dst]
 
 (!) :: Typeable msg => AgentId -> msg -> Agent ()
 (!) = send

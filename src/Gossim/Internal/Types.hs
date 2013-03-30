@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Gossim.Internal.Types
-       ( AgentId(AgentId)
+       ( AgentId(AgentId, unAgentId)
        , RumorId(RumorId, unRumorId)
        , Rumor(Rumor, rumorId, rumorSize)
        , Time
@@ -19,7 +19,7 @@ import Data.Word (Word64)
 type Time = Word64
 type Prob = Double
 
-newtype AgentId = AgentId Int
+newtype AgentId = AgentId { unAgentId :: Int }
                 deriving (Eq, Typeable)
 
 instance Buildable AgentId where

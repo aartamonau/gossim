@@ -43,7 +43,7 @@ import Data.PQueue.Prio.Min (MinPQueue)
 import qualified Data.PQueue.Prio.Min as PQueue
 
 import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
-                              Action(Log, Send, Receive, Discovered),
+                              Action(Log, Broadcast, Receive, Discovered),
                               ReceiveHandler(Handler),
                               newAgentState, bounce)
 import qualified Gossim.Internal.Agent as Agent
@@ -234,7 +234,7 @@ processPendingSideEffects = do
   let pred (ts, _) _ = ts <= time
   (sideEffects, pending') <- PQueue.spanWithKey pred <$> use pendingSideEffects
   pendingSideEffects .= pending'
-  debugM "Found {} pending side-effects" (Only $ length sideEffects)
+  debugM "Found {} pending side-effect(s)" (Only $ length sideEffects)
   mapMOf_ (folded._2) processSideEffect sideEffects
 
 processSideEffect :: SideEffect -> Gossim ()
@@ -311,15 +311,16 @@ processAction aid (Log level text s) = do
     logM level "{}" (Only text)
   setRunnable aid
   return $ Just s
-processAction aid (Send (AgentId dst) msg s) = do
-  debugM "Processing send (agent {})" (Only aid)
-  queueSideEffect 0 (Message dst msg)
+processAction aid (Broadcast dsts msg s) = do
+  debugM "Processing broadcast from agent {} to {} destination(s)" (aid, length dsts)
+  forM_ dsts $ \(AgentId dst) ->
+    queueSideEffect 0 (Message dst msg)
   setRunnable aid
   return $ Just s
 processAction aid (Receive handlers c) = do
   messages <- getMessages aid
   debugM ("Processing receive (agent {}). \
-           \We have {} messages in the queue") (aid, Seq.length messages)
+           \We have {} message(s) in the queue") (aid, Seq.length messages)
   let maybeCont = findCont handlers messages
   case maybeCont of
     Nothing -> do

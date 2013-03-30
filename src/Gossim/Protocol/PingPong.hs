@@ -8,7 +8,7 @@ module Gossim.Protocol.PingPong
 import Data.Typeable (Typeable)
 
 import Gossim (Agent, AgentId, Only(Only),
-               isMaster, getSelf, getAgents, (!), receive,
+               isMaster, getSelf, getAgents, broadcast, (!), receive,
                infoM, errorM)
 
 data Message = Ping AgentId | Pong AgentId
@@ -27,16 +27,13 @@ agent = do
 
   where loopMaster :: Agent ()
         loopMaster = do
-          _ <- mapM_ ping =<< getAgents
+          agents <- getAgents
+          self <- getSelf
+          infoM "Sending ping to {} agents" (Only $ length agents)
+          broadcast agents (Ping self)
           receive handleMsg
           loopMaster
-          where ping :: AgentId -> Agent ()
-                ping aid = do
-                  infoM "Sending ping to {}" (Only aid)
-                  self <- getSelf
-                  aid ! Ping self
-
-                handleMsg :: Message -> Agent ()
+          where handleMsg :: Message -> Agent ()
                 handleMsg (Pong aid) = infoM "Got pong from {}" (Only aid)
                 handleMsg (Ping aid) = errorM "Got unexpected ping from {}" (Only aid)
 
