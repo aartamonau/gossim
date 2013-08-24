@@ -43,7 +43,7 @@ import Data.PQueue.Prio.Min (MinPQueue)
 import qualified Data.PQueue.Prio.Min as PQueue
 
 import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
-                              Action(Log, Broadcast, Receive, Discovered),
+                              Action(Log, Broadcast, Receive),
                               ReceiveHandler(Handler),
                               newAgentState, bounce)
 import qualified Gossim.Internal.Agent as Agent
@@ -353,11 +353,6 @@ processAction aid (Receive handlers c) = do
             liftM h (maybeMsg >>= cast)
             where maybeMsg :: Maybe a
                   maybeMsg = fromDynamic msg
-processAction aid (Discovered _ s) = do
-  debugM "Processing discovery event (agent {})" (Only aid)
-  setRunnable aid
-  -- TODO
-  return (Just s)
 
 getAgent :: Int -> Gossim (Agent (), AgentState)
 getAgent aid = extract <$> IntMap.lookup aid <$> use agents

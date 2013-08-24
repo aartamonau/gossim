@@ -4,7 +4,7 @@
 
 module Gossim.Internal.Agent
        ( ReceiveHandler(Handler)
-       , Action (Log, Broadcast, Receive, Discovered)
+       , Action (Log, Broadcast, Receive)
        , AgentEnv (AgentEnv, self, master, agents, rumors)
        , Agent (Agent, unAgent)
        , AgentState
@@ -16,7 +16,6 @@ module Gossim.Internal.Agent
        , (!)
        , receive
        , receiveMany
-       , discovered
        , getAgents
        , getSelf
        , getRumor
@@ -50,13 +49,11 @@ data ReceiveHandler r where
 data Action s where
   Log :: Level -> Text -> s -> Action s
   Broadcast :: [AgentId] -> Dynamic -> s -> Action s
-  Discovered :: Rumor -> s -> Action s
   Receive :: [ReceiveHandler a] -> (Agent a -> s) -> Action s
 
 instance Functor Action where
   fmap f (Log level text s) = Log level text (f s)
   fmap f (Broadcast dst msg s) = Broadcast dst msg (f s)
-  fmap f (Discovered r s) = Discovered r (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
 
 data AgentEnv = AgentEnv { self   :: AgentId
@@ -114,9 +111,6 @@ receive h = receiveMany [Handler h]
 
 receiveMany :: [ReceiveHandler a] -> Agent a
 receiveMany handlers = join $ Agent $ suspend (Receive handlers return)
-
-discovered :: Rumor -> Agent ()
-discovered rumor = Agent $ suspend (Discovered rumor (return ()))
 
 getAgents :: Agent [AgentId]
 getAgents = asks agents
