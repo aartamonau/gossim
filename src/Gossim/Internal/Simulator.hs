@@ -14,7 +14,6 @@
 import Prelude hiding (mapM, mapM_)
 
 import Control.Applicative ((<$>))
-import Control.Arrow ((&&&))
 import Control.Lens (makeLenses, use, uses, mapMOf_, folded, _2,
                      (%=), (<<%=), (<<.=), (.=))
 import Control.Monad (replicateM, liftM, forM_)
@@ -48,13 +47,9 @@ import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
                               newAgentState, bounce)
 import qualified Gossim.Internal.Agent as Agent
 
-import Gossim.Internal.Types (Time,
-                              AgentId(AgentId),
-                              Rumor(Rumor), RumorId(RumorId),
-                              rumorId, unRumorId)
+import Gossim.Internal.Types (Time, AgentId(AgentId))
 import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
-                               evalRandomT, newSeed,
-                               randomRInt, randomMaybeM)
+                               evalRandomT, newSeed)
 import Gossim.Internal.Logging (Log, Level(Trace),
                                 MonadLog(askLog), Only(Only),
                                 initLogging,
@@ -100,7 +95,6 @@ data GossimState =
               , _runnableAgents :: IntSet
 
               , _nextRumorId :: Int
-              , _rumors      :: IntMap Rumor
               }
 
 makeLenses ''GossimState
@@ -130,18 +124,6 @@ defaultConfig =
 forallAgents :: a -> AgentId -> a
 forallAgents = const
 
-getNextRumorId :: GossimPure m => m RumorId
-getNextRumorId = RumorId <$> (nextRumorId <<%= (+1))
-
-createRumor :: GossimPure m => Int -> m Rumor
-createRumor size = do
-  rid <- getNextRumorId
-  return $ Rumor rid size
-
-rumorIdInt :: Rumor -> Int
-rumorIdInt = unRumorId . rumorId
-
-
 getNextAgentId :: GossimPure m => m Int
 getNextAgentId = nextAgentId <<%= (+1)
 
@@ -166,7 +148,6 @@ simulate agent title config@(GossimConfig {logLevel}) = do
                                  , _runnableStates     = IntMap.empty
                                  , _messageQueues      = IntMap.empty
                                  , _nextRumorId        = 0
-                                 , _rumors             = IntMap.empty
                                  }
 
   runGossim (scope "simulator" $ doSimulate agent title) config initialState seed
@@ -183,10 +164,6 @@ doSimulate agent title = do
   runnableStates .= IntMap.fromList [(aid, Runnable) | aid <- agentIds]
   messageQueues .= IntMap.fromList [(aid, Seq.empty) | aid <- agentIds]
   infoM "Created {} agents" (Only numAgents)
-
-  -- TODO: unfix this
-  rs <- replicateM 1000 (createRumor 100)
-  rumors .= IntMap.fromList (map (rumorIdInt &&& id) rs)
 
   step agent
 
@@ -220,11 +197,9 @@ processSideEffect (Message dst msg) = do
 
 doStep :: Agent () -> Gossim ()
 doStep _ = do
-  envRumors <- use rumors
   envAgents <- map AgentId <$> IntMap.keys <$> use agents
   let envTemplate = AgentEnv { Agent.self = error "Use of uninitialized self"
                              , Agent.master = head envAgents
-                             , Agent.rumors = envRumors
                              , Agent.agents = envAgents
                              }
 

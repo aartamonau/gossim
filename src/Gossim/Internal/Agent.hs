@@ -5,7 +5,7 @@
 module Gossim.Internal.Agent
        ( ReceiveHandler(Handler)
        , Action (Log, Broadcast, Receive)
-       , AgentEnv (AgentEnv, self, master, agents, rumors)
+       , AgentEnv (AgentEnv, self, master, agents)
        , Agent (Agent, unAgent)
        , AgentState
        , agentState
@@ -18,7 +18,6 @@ module Gossim.Internal.Agent
        , receiveMany
        , getAgents
        , getSelf
-       , getRumor
        , getMaster
        , isMaster
        ) where
@@ -30,9 +29,6 @@ import Control.Monad.Reader (ReaderT, MonadReader(ask, local, reader),
                              runReaderT, asks)
 import Control.Monad.Coroutine (Coroutine(resume), mapMonad, suspend)
 
-import Data.Maybe (fromMaybe)
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
 import Data.Text (Text)
 
 import Data.Dynamic (Dynamic, toDyn)
@@ -40,7 +36,7 @@ import Data.Typeable (Typeable)
 
 import Gossim.Internal.Random (Random, Seed, MonadRandom(liftRandom),
                                runRandom, newSeed)
-import Gossim.Internal.Types (AgentId, Rumor, RumorId(RumorId))
+import Gossim.Internal.Types (AgentId)
 import Gossim.Internal.Logging (MonadLogPure(doLog), Level)
 
 data ReceiveHandler r where
@@ -59,7 +55,6 @@ instance Functor Action where
 data AgentEnv = AgentEnv { self   :: AgentId
                          , master :: AgentId
                          , agents :: [AgentId]
-                         , rumors :: IntMap Rumor
                          }
 
 newtype Agent a =
@@ -117,11 +112,6 @@ getAgents = asks agents
 
 getSelf :: Agent AgentId
 getSelf = asks self
-
-getRumor :: RumorId -> Agent Rumor
-getRumor (RumorId rid) =
-  fromMaybe reportError . IntMap.lookup rid <$> asks rumors
-  where reportError = error $ "Impossible: no rumor with id " ++ show rid
 
 getMaster :: Agent AgentId
 getMaster = asks master

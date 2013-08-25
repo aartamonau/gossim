@@ -5,11 +5,11 @@ module Gossim
        , module Gossim.Internal.Logging
        ) where
 
-import Gossim.Internal.Types (AgentId, RumorId, Rumor(rumorId))
+import Gossim.Internal.Types (AgentId)
 import Gossim.Internal.Agent (ReceiveHandler(Handler), Agent,
                               send, (!), broadcast,
                               receive, receiveMany,
-                              getAgents, getSelf, getRumor,
+                              getAgents, getSelf,
                               getMaster, isMaster)
 import Gossim.Internal.Random (MonadRandom,
                                randomInt, randomRInt, randomDouble,
