@@ -71,8 +71,6 @@ newtype Gossim a =
 type GossimPure m = (Functor m, Monad m, MonadRandom m,
                      MonadState GossimState m, MonadReader GossimConfig m)
 
-type RandomFunction a = GossimPure m => Time -> AgentId -> m a
-
 data RunnableState = Running | Runnable | Blocked
 
 data GossimConfig =
@@ -80,9 +78,6 @@ data GossimConfig =
 
                , duration  :: Time
                , numAgents :: Int
-
-               , newRumorRF     :: RandomFunction (Maybe Rumor)
-               , agentFailureRF :: RandomFunction Bool
                }
 
 type Nonce = Int
@@ -122,37 +117,18 @@ runGossim (Gossim a) config state =
 
 
 ------------------------------------------------------------------------------
-defaultNewRumorRF :: RandomFunction (Maybe Rumor)
-defaultNewRumorRF =
-  independent $ randomMaybeM 0.4 $ do
-    size <- randomRInt (1, 100)
-    createRumor size
-
-defaultAgentFailureRF :: RandomFunction Bool
-defaultAgentFailureRF = independent $ return False
-
 defaultConfig :: GossimConfig
 defaultConfig =
   GossimConfig { logLevel = Trace
 
                , duration  = 1000
                , numAgents = 50
-
-               , newRumorRF     = defaultNewRumorRF
-               , agentFailureRF = defaultAgentFailureRF
                }
 
 
 ------------------------------------------------------------------------------
-stationary :: a -> Time -> a
-stationary = const
-
 forallAgents :: a -> AgentId -> a
 forallAgents = const
-
-independent :: a -> Time -> AgentId -> a
-independent = stationary . forallAgents
-
 
 getNextRumorId :: GossimPure m => m RumorId
 getNextRumorId = RumorId <$> (nextRumorId <<%= (+1))
