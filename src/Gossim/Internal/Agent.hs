@@ -14,11 +14,9 @@ module Gossim.Internal.Agent
        , receiveMany
        , getAgents
        , getSelf
-       , getMaster
-       , isMaster
        ) where
 
-import Control.Applicative (Applicative, (<$>), (<*>))
+import Control.Applicative (Applicative)
 import Control.Monad (join)
 import Control.Monad.Identity (Identity, runIdentity)
 import Control.Monad.Coroutine (Coroutine(resume), suspend)
@@ -89,9 +87,3 @@ getAgents = Agent $ suspend (GetAgents return)
 
 getSelf :: Agent AgentId
 getSelf = Agent $ suspend (GetSelf return)
-
-getMaster :: Agent AgentId
-getMaster = undefined
-
-isMaster :: Agent Bool
-isMaster = (==) <$> getSelf <*> getMaster

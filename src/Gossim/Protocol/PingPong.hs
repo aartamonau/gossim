@@ -8,7 +8,7 @@ module Gossim.Protocol.PingPong
 import Data.Typeable (Typeable)
 
 import Gossim (Agent, AgentId, Only(Only),
-               isMaster, getSelf, getAgents, broadcast, (!), receive,
+               getSelf, getAgents, broadcast, (!), receive,
                infoM, errorM)
 
 data Message = Ping AgentId | Pong AgentId
@@ -49,3 +49,10 @@ agent = do
                   aid ! Pong self
                 handleMsg (Pong aid) =
                   errorM "Got unexpected pong from {}" (Only aid)
+
+isMaster :: Agent Bool
+isMaster = do
+  self <- getSelf
+  agents <- getAgents
+
+  return $ self == minimum agents

@@ -9,8 +9,7 @@ import Gossim.Internal.Types (AgentId)
 import Gossim.Internal.Agent (ReceiveHandler(Handler), Agent,
                               send, (!), broadcast,
                               receive, receiveMany,
-                              getAgents, getSelf,
-                              getMaster, isMaster)
+                              getAgents, getSelf)
 import Gossim.Internal.Random (MonadRandom,
                                randomInt, randomRInt, randomDouble,
                                randomBool, randomMaybe, randomMaybeM,
