@@ -4,7 +4,7 @@
 
 module Gossim.Internal.Agent
        ( ReceiveHandler(Handler)
-       , Action (Log, Broadcast, Receive, Random)
+       , Action (Log, Broadcast, Receive, Random, GetSelf, GetAgents)
        , Agent (Agent, unAgent)
        , bounce
        , broadcast
@@ -40,12 +40,16 @@ data Action s where
   Broadcast :: [AgentId] -> Dynamic -> s -> Action s
   Receive :: [ReceiveHandler a] -> (Agent a -> s) -> Action s
   Random :: (Seed -> (a, Seed)) -> (a -> s) -> Action s
+  GetSelf :: (AgentId -> s) -> Action s
+  GetAgents :: ([AgentId] -> s) -> Action s
 
 instance Functor Action where
   fmap f (Log level text s) = Log level text (f s)
   fmap f (Broadcast dst msg s) = Broadcast dst msg (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
   fmap f (Random fr s) = Random fr (f . s)
+  fmap f (GetSelf s) = GetSelf (f . s)
+  fmap f (GetAgents s) = GetAgents (f . s)
 
 newtype Agent a =
   Agent { unAgent :: Coroutine Action Identity a }
@@ -81,10 +85,10 @@ receiveMany :: [ReceiveHandler a] -> Agent a
 receiveMany handlers = join $ Agent $ suspend (Receive handlers return)
 
 getAgents :: Agent [AgentId]
-getAgents = undefined
+getAgents = Agent $ suspend (GetAgents return)
 
 getSelf :: Agent AgentId
-getSelf = undefined
+getSelf = Agent $ suspend (GetSelf return)
 
 getMaster :: Agent AgentId
 getMaster = undefined

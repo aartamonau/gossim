@@ -41,7 +41,8 @@ import Data.PQueue.Prio.Min (MinPQueue)
 import qualified Data.PQueue.Prio.Min as PQueue
 
 import Gossim.Internal.Agent (Agent,
-                              Action(Log, Broadcast, Receive, Random),
+                              Action(Log, Broadcast, Receive, Random,
+                                     GetSelf, GetAgents),
                               ReceiveHandler(Handler), bounce)
 
 import Gossim.Internal.Types (Time, AgentId(AgentId))
@@ -239,6 +240,13 @@ takesTick (Log _ _ _) = return False
 takesTick _           = return True
 
 processAction :: Int -> Action (Agent ()) -> Gossim (Maybe (Agent ()))
+processAction aid (GetSelf c) = do
+  setRunnable aid
+  return $ Just (c (AgentId aid))
+processAction aid (GetAgents c) = do
+  setRunnable aid
+  as <- map AgentId <$> IntMap.keys <$> use agents
+  return $ Just (c as)
 processAction aid (Random f c) = do
   r <- liftRandom f
   setRunnable aid
