@@ -22,6 +22,7 @@ import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
+import Data.Default (Default(def))
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq, ViewL(EmptyL, (:<)), (><), (|>))
 import qualified Data.Sequence as Seq
@@ -117,6 +118,8 @@ defaultConfig =
                , numAgents = 50
                }
 
+instance Default GossimConfig where
+  def = defaultConfig
 
 ------------------------------------------------------------------------------
 forallAgents :: a -> AgentId -> a
