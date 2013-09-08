@@ -36,7 +36,7 @@ import qualified System.Random.Mersenne.Pure64 as Mersenne
 
 import Gossim.Internal.Types (Prob)
 
-newtype Seed = Seed PureMT
+newtype Seed = Seed { unSeed :: PureMT }
 
 newtype RandomT m a = RandomT (StateT Seed m a)
                     deriving (Monad, MonadState Seed,
@@ -81,7 +81,7 @@ newSeed :: MonadIO m => m Seed
 newSeed = liftIO $ liftM Seed Mersenne.newPureMT
 
 liftMersenne :: MonadRandom m => (PureMT -> (a, PureMT)) -> m a
-liftMersenne = undefined
+liftMersenne f = liftRandom (fmap Seed . f . unSeed)
 
 
 ------------------------------------------------------------------------------
