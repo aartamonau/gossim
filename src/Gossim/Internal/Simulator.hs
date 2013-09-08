@@ -22,7 +22,6 @@ import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
-import Data.List (delete)
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq, ViewL(EmptyL, (:<)), (><), (|>))
 import qualified Data.Sequence as Seq
@@ -41,14 +40,12 @@ import qualified Data.IntSet as IntSet
 import Data.PQueue.Prio.Min (MinPQueue)
 import qualified Data.PQueue.Prio.Min as PQueue
 
-import Gossim.Internal.Agent (Agent, AgentState, AgentEnv(AgentEnv),
-                              Action(Log, Broadcast, Receive),
-                              ReceiveHandler(Handler),
-                              newAgentState, bounce)
-import qualified Gossim.Internal.Agent as Agent
+import Gossim.Internal.Agent (Agent,
+                              Action(Log, Broadcast, Receive, Random),
+                              ReceiveHandler(Handler), bounce)
 
 import Gossim.Internal.Types (Time, AgentId(AgentId))
-import Gossim.Internal.Random (RandomT, MonadRandom, Seed,
+import Gossim.Internal.Random (RandomT, MonadRandom(liftRandom), Seed,
                                evalRandomT, newSeed)
 import Gossim.Internal.Logging (Log, Level(Trace),
                                 MonadLog(askLog), Only(Only),
@@ -89,7 +86,7 @@ data GossimState =
               , _pendingSideEffects :: MinPQueue (Time, Nonce) SideEffect
 
               , _nextAgentId :: Int
-              , _agents      :: IntMap (Agent (), AgentState)
+              , _agents      :: IntMap (Agent ())
               , _runnableStates :: IntMap RunnableState
               , _messageQueues  :: IntMap (Seq Dynamic)
               , _runnableAgents :: IntSet
@@ -157,9 +154,7 @@ doSimulate agent title = do
   infoM "Starting {} simulation" (Only title)
   numAgents <- asks numAgents
   agentIds  <- replicateM numAgents getNextAgentId
-  agentStates <- replicateM numAgents newAgentState
-  agents .= IntMap.fromList [(aid, (agent, astate)) | aid <- agentIds
-                                                    | astate <- agentStates]
+  agents .= IntMap.fromList [(aid, agent) | aid <- agentIds]
   runnableAgents .= IntSet.fromList agentIds
   runnableStates .= IntMap.fromList [(aid, Runnable) | aid <- agentIds]
   messageQueues .= IntMap.fromList [(aid, Seq.empty) | aid <- agentIds]
@@ -197,46 +192,33 @@ processSideEffect (Message dst msg) = do
 
 doStep :: Agent () -> Gossim ()
 doStep _ = do
-  envAgents <- map AgentId <$> IntMap.keys <$> use agents
-  let envTemplate = AgentEnv { Agent.self = error "Use of uninitialized self"
-                             , Agent.master = head envAgents
-                             , Agent.agents = envAgents
-                             }
-
   -- runnableAgents gets updated for us by processRunnable; so we just have to
   -- empty it before
   runnable <- (runnableAgents <<.= IntSet.empty)
   debugM "Found {} runnable agent(s)" (Only $ IntSet.size runnable)
-  mapMOf_ members (processRunnable envTemplate) runnable
+  mapMOf_ members processRunnable runnable
 
-processRunnable :: AgentEnv -> Int -> Gossim ()
-processRunnable envTemplate aid = do
+processRunnable :: Int -> Gossim ()
+processRunnable aid = do
   debugM "Processing runnable agent {}" (Only aid)
-  (agent, astate) <- getAgent aid
-  processAgent env aid agent astate
+  agent <- getAgent aid
+  processAgent aid agent
 
-  where env = envTemplate { Agent.self = agentId
-                          -- I might want to do something smarter than this
-                          , Agent.agents = agentId `delete` agents
-                          }
-        agentId = AgentId aid
-        agents = Agent.agents envTemplate
-
-processAgent :: AgentEnv -> Int -> Agent () -> AgentState -> Gossim ()
-processAgent env aid agent astate = do
-  maybeNewAgentAndState <- doProcessAgent env aid agent astate
-  case maybeNewAgentAndState of
+processAgent :: Int -> Agent () -> Gossim ()
+processAgent aid agent = do
+  maybeNewAgent <- doProcessAgent aid agent
+  case maybeNewAgent of
     Nothing -> do
       infoM "Agent {} terminated" (Only aid)
       agents %= IntMap.delete aid
       messageQueues %= IntMap.delete aid
       runnableStates %= IntMap.delete aid
-    Just (agent', astate') ->
-      agents %= IntMap.insert aid (agent', astate')
+    Just agent' ->
+      agents %= IntMap.insert aid agent'
 
-doProcessAgent :: AgentEnv -> Int -> Agent () -> AgentState
-               -> Gossim (Maybe (Agent (), AgentState))
-doProcessAgent env aid agent astate =
+doProcessAgent :: Int -> Agent ()
+               -> Gossim (Maybe (Agent ()))
+doProcessAgent aid agent =
   case cont of
     Right () ->
       return Nothing
@@ -244,19 +226,23 @@ doProcessAgent env aid agent astate =
       setRunning aid
       maybeNewAgent <- processAction aid action
       case maybeNewAgent of
-        Nothing -> return $ Just (agent, astate)
+        Nothing -> return $ Just agent
         Just newAgent -> do
           proceed <- not <$> takesTick action
           if proceed
-            then doProcessAgent env aid newAgent astate'
-            else return $ Just (newAgent, astate')
-  where (astate', cont) = bounce agent env astate
+            then doProcessAgent aid newAgent
+            else return $ Just newAgent
+  where cont = bounce agent
 
 takesTick :: Action (Agent ()) -> Gossim Bool
 takesTick (Log _ _ _) = return False
 takesTick _           = return True
 
 processAction :: Int -> Action (Agent ()) -> Gossim (Maybe (Agent ()))
+processAction aid (Random f c) = do
+  r <- liftRandom f
+  setRunnable aid
+  return $ Just (c r)
 processAction aid (Log level text s) = do
   scope (format "{}" (Only $ AgentId aid)) $
     logM level "{}" (Only text)
@@ -305,7 +291,7 @@ processAction aid (Receive handlers c) = do
             where maybeMsg :: Maybe a
                   maybeMsg = fromDynamic msg
 
-getAgent :: Int -> Gossim (Agent (), AgentState)
+getAgent :: Int -> Gossim (Agent ())
 getAgent aid = extract <$> IntMap.lookup aid <$> use agents
   where extract = fromMaybe (error $ "Cannot find agent " ++ show aid)
 
