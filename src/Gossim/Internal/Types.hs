@@ -6,6 +6,7 @@ module Gossim.Internal.Types
        ( AgentId(AgentId, unAgentId)
        , Time
        , Prob
+       , Tick
        ) where
 
 import Data.Monoid (mconcat)
@@ -16,6 +17,7 @@ import Data.Word (Word64)
 
 type Time = Word64
 type Prob = Double
+type Tick = Int
 
 newtype AgentId = AgentId { unAgentId :: Int }
                 deriving (Eq, Ord, Typeable)
