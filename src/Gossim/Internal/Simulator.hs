@@ -46,7 +46,7 @@ import Gossim.Internal.Agent (Agent,
                                      GetSelf, GetAgents),
                               ReceiveHandler(Handler), bounce)
 
-import Gossim.Internal.Types (Time, AgentId(AgentId))
+import Gossim.Internal.Types (Time, AgentId(AgentId), Tick)
 import Gossim.Internal.Random (RandomT, MonadRandom(liftRandom), Seed,
                                evalRandomT, newSeed)
 import Gossim.Internal.Logging (Log, Level(Trace),
@@ -237,6 +237,10 @@ doProcessAgent aid agent =
             then doProcessAgent aid newAgent
             else return $ Just newAgent
   where cont = bounce agent
+
+actionCost :: Action a -> Tick
+actionCost (Log _ _ _) = Sched.opCost 100
+actionCost _ = Sched.opCost 10
 
 takesTick :: Action (Agent ()) -> Gossim Bool
 takesTick (Log _ _ _) = return False

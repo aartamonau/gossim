@@ -3,6 +3,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
+module Gossim.Internal.Simulator.Scheduler where
+
 import Control.Lens (IndexPreservingGetter,
                      makeLenses, (%~), (%=), (.~), (.=), (&), to, use, uses)
 
@@ -77,6 +79,9 @@ run op cost = do
   if enoughTicks
     then liftM Just (lift op)
     else return Nothing
+
+opCost :: Int -> Tick
+opCost num = ticksPerSlice `div` num
 
 first :: IndexPreservingGetter (Seq a) (Maybe a)
 first = to go
