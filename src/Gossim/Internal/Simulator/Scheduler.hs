@@ -8,6 +8,7 @@ module Gossim.Internal.Simulator.Scheduler where
 import Control.Lens (IndexPreservingGetter,
                      makeLenses, (%~), (%=), (.~), (.=), (&), to, use, uses)
 
+import Control.Applicative (Applicative)
 import Control.Monad (when, liftM)
 import Control.Monad.State (StateT, MonadState, runStateT)
 import Control.Monad.Trans (MonadTrans, lift)
@@ -31,7 +32,8 @@ instance Default Scheduler where
   def = Scheduler ticksPerSlice def def
 
 newtype Sched m a = Sched { unSched :: StateT Scheduler m a }
-                  deriving (Functor, Monad, MonadTrans, MonadState Scheduler)
+                  deriving (Functor, Applicative, Monad,
+                            MonadTrans, MonadState Scheduler)
 
 ticksPerSlice :: Tick
 ticksPerSlice = 1000
