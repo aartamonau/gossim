@@ -16,7 +16,7 @@ module Gossim.Internal.Simulator
 
 import Prelude hiding (mapM, mapM_)
 
-import Control.Applicative ((<$>))
+import Control.Applicative (Applicative, (<$>))
 import Control.Lens (makeLenses, use, uses, mapMOf_, folded, _2,
                      (%=), (<<%=), (<<.=), (.=))
 import Control.Monad (replicateM, liftM, forM_)
@@ -57,11 +57,19 @@ import Gossim.Internal.Logging (MonadLogger(monadLoggerLog),
                                 runStdoutLoggingT,
                                 logDebug, logInfo)
 
+import Gossim.Internal.Simulator.Scheduler (Scheduler)
+import Gossim.Internal.Simulator.Scheduler as Sched
+
+-- TODO: remove
+import qualified Gossim.Protocol.PingPong as PP
+
+rudimentary :: Agent ()
+rudimentary = $(logDebug) "test" () >> rudimentary
 
 ------------------------------------------------------------------------------
 newtype Gossim a =
   Gossim (ReaderT GossimConfig (StateT GossimState (RandomT (LoggingT IO))) a)
-  deriving (Functor, Monad, MonadRandom,
+  deriving (Functor, Applicative, Monad, MonadRandom,
             MonadState GossimState, MonadReader GossimConfig,
             MonadIO, MonadLogger)
 
