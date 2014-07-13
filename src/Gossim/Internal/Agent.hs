@@ -21,20 +21,21 @@ import Control.Monad (join)
 import Control.Monad.Identity (Identity, runIdentity)
 import Control.Monad.Coroutine (Coroutine(resume), suspend)
 
-import Data.Text (Text)
-
 import Data.Dynamic (Dynamic, toDyn)
 import Data.Typeable (Typeable)
 
+import Control.Monad.Logger (MonadLogger(monadLoggerLog),
+                             Loc, LogSource, LogLevel)
+import System.Log.FastLogger (LogStr, toLogStr)
+
 import Gossim.Internal.Random (Seed, MonadRandom(liftRandom))
 import Gossim.Internal.Types (AgentId)
-import Gossim.Internal.Logging (MonadLogPure(doLog), Level)
 
 data ReceiveHandler r where
   Handler :: Typeable a => (a -> Agent r) -> ReceiveHandler r
 
 data Action s where
-  Log :: Level -> Text -> s -> Action s
+  Log :: Loc -> LogSource -> LogLevel -> LogStr -> s -> Action s
   Broadcast :: [AgentId] -> Dynamic -> s -> Action s
   Receive :: [ReceiveHandler a] -> (Agent a -> s) -> Action s
   Random :: (Seed -> (a, Seed)) -> (a -> s) -> Action s
@@ -42,7 +43,7 @@ data Action s where
   GetAgents :: ([AgentId] -> s) -> Action s
 
 instance Functor Action where
-  fmap f (Log level text s) = Log level text (f s)
+  fmap f (Log loc source level text s) = Log loc source level text (f s)
   fmap f (Broadcast dst msg s) = Broadcast dst msg (f s)
   fmap f (Receive handlers s) = Receive handlers (f . s)
   fmap f (Random fr s) = Random fr (f . s)
@@ -56,8 +57,9 @@ newtype Agent a =
 instance MonadRandom Agent where
   liftRandom fr = Agent $ suspend (Random fr return)
 
-instance MonadLogPure Agent where
-  doLog level text = Agent $ suspend (Log level text (return ()))
+instance MonadLogger Agent where
+  monadLoggerLog loc source level msg =
+    Agent $ suspend (Log loc source level (toLogStr msg) (return ()))
 
 
 ------------------------------------------------------------------------------

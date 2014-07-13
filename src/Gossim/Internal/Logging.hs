@@ -1,55 +1,44 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Gossim.Internal.Logging
-       ( Log
-       , Level(Trace, Debug, Info, Warning, Error, Fatal)
-       , MonadLog(askLog)
-       , MonadLogPure(doLog)
+       ( MonadLogger(monadLoggerLog)
+       , LoggingT
+       , Loc
+       , LogSource
+       , LogLevel(LevelDebug, LevelInfo, LevelWarn, LevelError)
+       , LogStr
+       , ToLogStr(toLogStr)
+       , Format
        , Only(Only)
-       , initLogging
-       , logM
-       , traceM
-       , debugM
-       , infoM
-       , warningM
-       , errorM
-       , fatalM
-       , scope
+       , Params
        , format
+       , logDebug
+       , logInfo
+       , logWarn
+       , logError
+       , logGeneric
+       , runStdoutLoggingT
        ) where
 
-import Prelude hiding (log)
+
+import Language.Haskell.TH.Syntax (Lift (lift), Q, Exp, qLocation)
+
+import Control.Monad.Logger (MonadLogger(monadLoggerLog),
+                             LoggingT,
+                             Loc, LogSource,
+                             LogLevel(LevelDebug, LevelInfo,
+                                      LevelWarn, LevelError),
+                             liftLoc, runStdoutLoggingT)
+import System.Log.FastLogger (LogStr, ToLogStr(toLogStr))
 
 import Data.Text (Text)
 import Data.Text.Lazy (toStrict)
 import Data.Text.Format (Format, Only(Only))
 import qualified Data.Text.Format as Fmt
 import Data.Text.Format.Params (Params)
-
-import System.Log.Simple (MonadLog(askLog), Log,
-                          Level(Trace, Debug, Info, Warning, Error, Fatal),
-                          Politics(Politics, politicsLow, politicsHigh),
-                          rule, root, newLog, constant,
-                          logger, text, console, log, use, scope)
-
-
-------------------------------------------------------------------------------
-initLogging :: Level -> IO Log
-initLogging level = newLog (constant logRules) [logger text console]
-  where logRules = [rule root $ use logPolitics]
-        logPolitics = Politics { politicsLow  = level
-                               , politicsHigh = Fatal
-                               }
-
-
-------------------------------------------------------------------------------
-class Monad m => MonadLogPure m where
-  doLog :: Level -> Text -> m ()
-
-instance MonadLog m => MonadLogPure m where
-  doLog = log
 
 
 ------------------------------------------------------------------------------
@@ -58,23 +47,22 @@ format fmt = toStrict . Fmt.format fmt
 
 
 ------------------------------------------------------------------------------
-logM :: (Params ps, MonadLogPure m) => Level -> Format -> ps -> m ()
-logM level fmt = doLog level . format fmt
+logDebug :: Q Exp
+logDebug = logTH LevelDebug
 
-traceM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
-traceM = logM Trace
+logInfo :: Q Exp
+logInfo = logTH LevelInfo
 
-debugM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
-debugM = logM Debug
+logWarn :: Q Exp
+logWarn = logTH LevelWarn
 
-infoM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
-infoM = logM Info
+logError :: Q Exp
+logError = logTH LevelError
 
-warningM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
-warningM = logM Warning
+logGeneric :: LogLevel -> Q Exp
+logGeneric = logTH
 
-errorM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
-errorM = logM Error
-
-fatalM :: (Params ps, MonadLogPure m) => Format -> ps -> m ()
-fatalM = logM Fatal
+logTH :: LogLevel -> Q Exp
+logTH level =
+    [|\fmt ->
+         monadLoggerLog $(qLocation >>= liftLoc) "" $(lift level) . format fmt|]

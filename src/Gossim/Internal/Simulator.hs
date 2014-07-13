@@ -11,6 +11,9 @@
 
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
+module Gossim.Internal.Simulator
+       where
+
 import Prelude hiding (mapM, mapM_)
 
 import Control.Applicative ((<$>))
@@ -18,7 +21,6 @@ import Control.Lens (makeLenses, use, uses, mapMOf_, folded, _2,
                      (%=), (<<%=), (<<.=), (.=))
 import Control.Monad (replicateM, liftM, forM_)
 import Control.Monad.Trans (MonadIO)
-import Control.Monad.CatchIO (MonadCatchIO)
 import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, asks)
 import Control.Monad.State.Strict (StateT, MonadState, evalStateT)
 
@@ -49,18 +51,19 @@ import Gossim.Internal.Agent (Agent,
 import Gossim.Internal.Types (Time, AgentId(AgentId), Tick)
 import Gossim.Internal.Random (RandomT, MonadRandom(liftRandom), Seed,
                                evalRandomT, newSeed)
-import Gossim.Internal.Logging (Log, Level(Trace),
-                                MonadLog(askLog), Only(Only),
-                                initLogging,
-                                logM, debugM, infoM, scope, format)
+import Gossim.Internal.Logging (MonadLogger(monadLoggerLog),
+                                LoggingT, Only(Only),
+                                LogLevel(LevelDebug),
+                                runStdoutLoggingT,
+                                logDebug, logInfo)
 
 
 ------------------------------------------------------------------------------
 newtype Gossim a =
-  Gossim (ReaderT GossimConfig (StateT GossimState (RandomT IO)) a)
+  Gossim (ReaderT GossimConfig (StateT GossimState (RandomT (LoggingT IO))) a)
   deriving (Functor, Monad, MonadRandom,
             MonadState GossimState, MonadReader GossimConfig,
-            MonadIO, MonadCatchIO)
+            MonadIO, MonadLogger)
 
 type GossimPure m = (Functor m, Monad m, MonadRandom m,
                      MonadState GossimState m, MonadReader GossimConfig m)
@@ -68,7 +71,7 @@ type GossimPure m = (Functor m, Monad m, MonadRandom m,
 data RunnableState = Running | Runnable | Blocked
 
 data GossimConfig =
-  GossimConfig { logLevel :: Level
+  GossimConfig { logLevel :: LogLevel
 
                , duration  :: Time
                , numAgents :: Int
@@ -78,9 +81,7 @@ type Nonce = Int
 data SideEffect = Message Int Dynamic
 
 data GossimState =
-  GossimState { _logger :: Log
-
-              , _time :: Time
+  GossimState { _time :: Time
 
                 -- MinPQueue is not stable so this is used to preserve the
                 -- order of side-effects
@@ -99,20 +100,16 @@ data GossimState =
 makeLenses ''GossimState
 
 
-instance MonadLog Gossim where
-  askLog = use logger
-
-
 ------------------------------------------------------------------------------
 runGossim :: Gossim a -> GossimConfig -> GossimState -> Seed -> IO a
-runGossim (Gossim a) config state =
-  evalRandomT (evalStateT (runReaderT a config) state)
+runGossim (Gossim a) config state seed =
+  runStdoutLoggingT $ evalRandomT (evalStateT (runReaderT a config) state) seed
 
 
 ------------------------------------------------------------------------------
 defaultConfig :: GossimConfig
 defaultConfig =
-  GossimConfig { logLevel = Trace
+  GossimConfig { logLevel = LevelDebug
 
                , duration  = 1000
                , numAgents = 50
@@ -137,10 +134,8 @@ getTime = use time
 ------------------------------------------------------------------------------
 simulate :: Agent () -> Text -> GossimConfig -> IO ()
 simulate agent title config@(GossimConfig {logLevel}) = do
-  logger <- initLogging logLevel
   seed <- newSeed
-  let initialState = GossimState { _logger             = logger
-                                 , _time               = 0
+  let initialState = GossimState { _time               = 0
                                  , _sideEffectNonce    = 0
                                  , _pendingSideEffects = PQueue.empty
                                  , _nextAgentId        = 0
@@ -151,18 +146,18 @@ simulate agent title config@(GossimConfig {logLevel}) = do
                                  , _nextRumorId        = 0
                                  }
 
-  runGossim (scope "simulator" $ doSimulate agent title) config initialState seed
+  runGossim (doSimulate agent title) config initialState seed
 
 doSimulate :: Agent () -> Text -> Gossim ()
 doSimulate agent title = do
-  infoM "Starting {} simulation" (Only title)
+  $logInfo "Starting {} simulation" (Only title)
   numAgents <- asks numAgents
   agentIds  <- replicateM numAgents getNextAgentId
   agents .= IntMap.fromList [(aid, agent) | aid <- agentIds]
   runnableAgents .= IntSet.fromList agentIds
   runnableStates .= IntMap.fromList [(aid, Runnable) | aid <- agentIds]
   messageQueues .= IntMap.fromList [(aid, Seq.empty) | aid <- agentIds]
-  infoM "Created {} agents" (Only numAgents)
+  $logInfo "Created {} agents" (Only numAgents)
 
   step agent
 
@@ -173,9 +168,9 @@ step agent = do
   done <- (time >=) <$> asks duration
 
   if done
-    then infoM "Finished simulation after {} steps" (Only time)
+    then $logInfo "Finished simulation after {} steps" (Only time)
     else do
-      debugM "Time {}" (Only time)
+      $logDebug "Time {}" (Only time)
       processPendingSideEffects
       doStep agent
       step agent
@@ -186,7 +181,7 @@ processPendingSideEffects = do
   let pred (ts, _) _ = ts <= time
   (sideEffects, pending') <- PQueue.spanWithKey pred <$> use pendingSideEffects
   pendingSideEffects .= pending'
-  debugM "Found {} pending side-effect(s)" (Only $ length sideEffects)
+  $logDebug "Found {} pending side-effect(s)" (Only $ length sideEffects)
   mapMOf_ (folded._2) processSideEffect sideEffects
 
 processSideEffect :: SideEffect -> Gossim ()
@@ -199,12 +194,12 @@ doStep _ = do
   -- runnableAgents gets updated for us by processRunnable; so we just have to
   -- empty it before
   runnable <- (runnableAgents <<.= IntSet.empty)
-  debugM "Found {} runnable agent(s)" (Only $ IntSet.size runnable)
+  $logDebug "Found {} runnable agent(s)" (Only $ IntSet.size runnable)
   mapMOf_ members processRunnable runnable
 
 processRunnable :: Int -> Gossim ()
 processRunnable aid = do
-  debugM "Processing runnable agent {}" (Only aid)
+  $logDebug "Processing runnable agent {}" (Only aid)
   agent <- getAgent aid
   processAgent aid agent
 
@@ -213,7 +208,7 @@ processAgent aid agent = do
   maybeNewAgent <- doProcessAgent aid agent
   case maybeNewAgent of
     Nothing -> do
-      infoM "Agent {} terminated" (Only aid)
+      $logInfo "Agent {} terminated" (Only aid)
       agents %= IntMap.delete aid
       messageQueues %= IntMap.delete aid
       runnableStates %= IntMap.delete aid
@@ -239,11 +234,11 @@ doProcessAgent aid agent =
   where cont = bounce agent
 
 actionCost :: Action a -> Tick
-actionCost (Log _ _ _) = Sched.opCost 100
+actionCost (Log _ _ _ _ _) = Sched.opCost 100
 actionCost _ = Sched.opCost 10
 
 takesTick :: Action (Agent ()) -> Gossim Bool
-takesTick (Log _ _ _) = return False
+takesTick (Log _ _ _ _ _) = return False
 takesTick _           = return True
 
 processAction :: Int -> Action (Agent ()) -> Gossim (Maybe (Agent ()))
@@ -258,28 +253,27 @@ processAction aid (Random f c) = do
   r <- liftRandom f
   setRunnable aid
   return $ Just (c r)
-processAction aid (Log level text s) = do
-  scope (format "{}" (Only $ AgentId aid)) $
-    logM level "{}" (Only text)
+processAction aid (Log loc source level text s) = do
+  monadLoggerLog loc source level text
   setRunnable aid
   return $ Just s
 processAction aid (Broadcast dsts msg s) = do
-  debugM "Processing broadcast from agent {} to {} destination(s)" (aid, length dsts)
+  $logDebug "Processing broadcast from agent {} to {} destination(s)" (aid, length dsts)
   forM_ dsts $ \(AgentId dst) ->
     queueSideEffect 0 (Message dst msg)
   setRunnable aid
   return $ Just s
 processAction aid (Receive handlers c) = do
   messages <- getMessages aid
-  debugM ("Processing receive (agent {}). \
-           \We have {} message(s) in the queue") (aid, Seq.length messages)
+  $logDebug ("Processing receive (agent {}). \
+              \We have {} message(s) in the queue") (aid, Seq.length messages)
   let maybeCont = findCont handlers messages
   case maybeCont of
     Nothing -> do
       setBlocked aid
       return Nothing
     Just (cont, messages') -> do
-      debugM "Found matching receive handler" ()
+      $logDebug "Found matching receive handler" ()
       messageQueues %= IntMap.insert aid messages'
       setRunnable aid
       return $ Just (c cont)

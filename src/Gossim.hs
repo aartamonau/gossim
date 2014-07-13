@@ -14,7 +14,8 @@ import Gossim.Internal.Random (MonadRandom,
                                randomInt, randomRInt, randomDouble,
                                randomBool, randomMaybe, randomMaybeM,
                                pick, pickUniformly)
-import Gossim.Internal.Logging (Level(Trace, Debug, Info, Warning, Error, Fatal),
+import Gossim.Internal.Logging (LogLevel(LevelDebug, LevelInfo,
+                                         LevelWarn, LevelError),
                                 Only(Only),
-                                logM, traceM, debugM, infoM,
-                                warningM, errorM, fatalM, format)
+                                logGeneric, logDebug, logInfo, logWarn, logError,
+                                format)

@@ -1,15 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Gossim.Protocol.PingPong
        ( agent
        ) where
 
+import Data.Text.Format (Only(Only))
 import Data.Typeable (Typeable)
 
-import Gossim (Agent, AgentId, Only(Only),
+import Gossim (Agent, AgentId,
                getSelf, getAgents, broadcast, (!), receive,
-               infoM, errorM)
+               logInfo, logError)
 
 data Message = Ping AgentId | Pong AgentId
              deriving Typeable
@@ -19,23 +21,23 @@ agent = do
   master <- isMaster
   if master
     then do
-      infoM "I am master" ()
+      $logInfo "I am master" ()
       loopMaster
     else do
-      infoM "I am slave" ()
+      $logInfo "I am slave" ()
       loopSlave
 
   where loopMaster :: Agent ()
         loopMaster = do
           agents <- getAgents
           self <- getSelf
-          infoM "Sending ping to {} agents" (Only $ length agents)
+          $logInfo "Sending ping to {} agents" (Only $ length agents)
           broadcast agents (Ping self)
           receive handleMsg
           loopMaster
           where handleMsg :: Message -> Agent ()
-                handleMsg (Pong aid) = infoM "Got pong from {}" (Only aid)
-                handleMsg (Ping aid) = errorM "Got unexpected ping from {}" (Only aid)
+                handleMsg (Pong aid) = $logInfo "Got pong from {}" (Only aid)
+                handleMsg (Ping aid) = $logError "Got unexpected ping from {}" (Only aid)
 
         loopSlave :: Agent ()
         loopSlave = do
@@ -44,11 +46,11 @@ agent = do
 
           where handleMsg :: Message -> Agent ()
                 handleMsg (Ping aid) = do
-                  infoM "Got ping from {}. Sending pong in response." (Only aid)
+                  $logInfo "Got ping from {}. Sending pong in response." (Only aid)
                   self <- getSelf
                   aid ! Pong self
                 handleMsg (Pong aid) =
-                  errorM "Got unexpected pong from {}" (Only aid)
+                  $logError "Got unexpected pong from {}" (Only aid)
 
 isMaster :: Agent Bool
 isMaster = do

@@ -34,6 +34,7 @@ import Control.Monad.Coroutine (Coroutine)
 import System.Random.Mersenne.Pure64 (PureMT)
 import qualified System.Random.Mersenne.Pure64 as Mersenne
 
+import Gossim.Internal.Logging (MonadLogger(monadLoggerLog))
 import Gossim.Internal.Types (Prob)
 
 newtype Seed = Seed { unSeed :: PureMT }
@@ -44,6 +45,9 @@ newtype RandomT m a = RandomT (StateT Seed m a)
                               MonadIO, MonadCatchIO)
 
 type Random = RandomT Identity
+
+instance MonadLogger m => MonadLogger (RandomT m) where
+  monadLoggerLog a b c d = RandomT (lift $ monadLoggerLog a b c d)
 
 class Monad m => MonadRandom m where
   liftRandom :: (Seed -> (a, Seed)) -> m a
